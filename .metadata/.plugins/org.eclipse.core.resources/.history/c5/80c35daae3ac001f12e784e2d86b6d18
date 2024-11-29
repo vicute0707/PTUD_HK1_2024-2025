@@ -1,0 +1,82 @@
+package component;
+
+import entity.User;
+import bus.UserBUS;
+import dialog.EmployeeDialog;
+
+import javax.swing.*;
+import java.util.List;
+import java.util.UUID;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.text.SimpleDateFormat;
+public class EmployeeManagementPanel extends BaseManagementPanel {
+    private final UserBUS userBUS;
+    private final SimpleDateFormat dateFormat;
+
+    public EmployeeManagementPanel() {
+        super("Quản lý nhân viên",
+                new String[] { "Mã NV", "Họ tên","Tên đăng nhập", "Giới tính", "Ngày sinh", "SDT", "Email", "Vai trò", "Trạng thái"},
+                loadEmployeeData());
+        userBUS = new UserBUS();
+        dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    }
+
+    private static Object[][] loadEmployeeData() {
+        UserBUS bus = new UserBUS();
+        List<User> users = bus.getAllUsers();
+        Object[][] data = new Object[users.size()][9];
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        for (int i = 0; i < users.size(); i++) {
+            User user = users.get(i);
+            data[i] = new Object[] { 
+                user.getUserID(), 
+                user.getFullName(),
+                user.getUsername(), 
+                user.getGender(),
+                sdf.format(user.getBirthDate()), 
+                user.getPhone(), 
+                user.getEmail(), 
+                user.getRole(),
+                user.getStatus() 
+            };
+        }
+        return data;
+    }
+
+    @Override
+    protected void handleAdd() {
+        User user = new User();
+        EmployeeDialog dialog = new EmployeeDialog((JFrame) SwingUtilities.getWindowAncestor(this), "Thêm nhân viên",
+                user, true);
+        dialog.setVisible(true);
+
+        if (dialog.isConfirmed()) {
+            try {
+                userBUS.addUser(user);
+                refreshTable();
+                JOptionPane.showMessageDialog(this, "Thêm nhân viên thành công!");
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void updateTableData(List<User> users) {
+        tableModel.setRowCount(0);
+        for (User user : users) {
+            tableModel.addRow(new Object[] { 
+                user.getUserID(), 
+                user.getFullName(),
+                user.getUsername(), 
+                user.getGender(),
+                dateFormat.format(user.getBirthDate()), 
+                user.getPhone(), 
+                user.getEmail(), 
+                user.getRole(),
+                user.getStatus() 
+            });
+        }
+    }
+}

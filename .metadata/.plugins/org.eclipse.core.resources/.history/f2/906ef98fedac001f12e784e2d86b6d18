@@ -1,0 +1,73 @@
+package bus;
+
+import dao.UserRoleDAO;
+import entity.UserRole;
+import java.util.List;
+
+public class UserRoleBUS {
+	private UserRoleDAO userRoleDAO;
+
+	public UserRoleBUS() {
+		userRoleDAO = new UserRoleDAO();
+	}
+
+	public List<UserRole> getAllRoles() {
+		return userRoleDAO.getAllRoles();
+	}
+
+	public UserRole getRoleById(String id) {
+		return userRoleDAO.getRoleByID(id);
+	}
+
+	public boolean addRole(UserRole role) throws Exception {
+		validateRole(role);
+		if (userRoleDAO.getRoleByID(role.getRoleID()) != null) {
+			throw new Exception("Mã vai trò đã tồn tại");
+		}
+		return userRoleDAO.updateRolePermissions(role.getRoleID(), role.getPermissions());
+	}
+
+	public boolean updateRole(UserRole role) throws Exception {
+		validateRole(role);
+		UserRole existingRole = userRoleDAO.getRoleByID(role.getRoleID());
+		if (existingRole == null) {
+			throw new Exception("Không tìm thấy vai trò");
+		}
+		return userRoleDAO.updateRolePermissions(role.getRoleID(), role.getPermissions());
+	}
+
+	public boolean deleteRole(String roleId) throws Exception {
+		if (roleId == null || roleId.trim().isEmpty()) {
+			throw new Exception("Mã vai trò không được để trống");
+		}
+		if (roleId.equals(UserRoleDAO.ADMIN_ROLE_ID)) {
+			throw new Exception("Không thể xóa vai trò Admin");
+		}
+		// Call delete method if added to DAO, for now return false
+		return false;
+	}
+
+	private void validateRole(UserRole role) throws Exception {
+		if (role.getRoleID() == null || role.getRoleID().trim().isEmpty()) {
+			throw new Exception("Mã vai trò không được để trống");
+		}
+		if (role.getRoleName() == null || role.getRoleName().trim().isEmpty()) {
+			throw new Exception("Tên vai trò không được để trống");
+		}
+		if (role.getPermissions() == null || role.getPermissions().trim().isEmpty()) {
+			throw new Exception("Phải chọn ít nhất một quyền");
+		}
+	}
+
+	public String generateNewRoleId() {
+	    String lastId = userRoleDAO.getLastRoleId();
+	    if (lastId == null || lastId.equals("ROLE000")) {
+	        return "ROLE001";
+	    }
+	    int currentNum = Integer.parseInt(lastId.substring(4));
+	    return String.format("ROLE%03d", currentNum + 1);
+	}
+	public String getPermissionNames(String permissions) {
+	    return userRoleDAO.getPermissionNames(permissions);
+	}
+}

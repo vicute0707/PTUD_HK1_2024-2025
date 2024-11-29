@@ -1,0 +1,209 @@
+package service;
+
+import entity.UserRole;
+import bus.UserRoleBUS;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+
+/**
+ * Manages permission checking and validation for the store management system.
+ * This class provides comprehensive permission management functionality
+ * including: - Permission validation - Role-based access control - Permission
+ * updates - JSON permission string handling
+ */
+public class PermissionChecker {
+	private static final Logger LOGGER = Logger.getLogger(PermissionChecker.class.getName());
+	private static final UserRoleBUS userRoleBUS = new UserRoleBUS();
+
+	// Permission constants mapped to database values
+	public static final String PERM_USER_MANAGEMENT = "PERM001"; // Quản lý người dùng
+	public static final String PERM_PRODUCT_MANAGEMENT = "PERM002"; // Quản lý sản phẩm
+	public static final String PERM_ORDER_MANAGEMENT = "PERM003"; // Quản lý đơn hàng
+	public static final String PERM_REPORT = "PERM004"; // Quản lý báo cáo
+
+	// Permission descriptions for UI display
+	public static final Map<String, String> PERMISSION_DISPLAY_NAMES = new HashMap<String, String>() {
+		{
+			put(PERM_USER_MANAGEMENT, "Quản lý người dùng, Quản lý phân quyền");
+			put(PERM_PRODUCT_MANAGEMENT, "Quyền quản lý danh mục và sản phẩm");
+			put(PERM_ORDER_MANAGEMENT, "Quyền quản lý đơn hàng và bán hàng");
+			put(PERM_REPORT, "Quản lý báo cáo");
+		}
+	};
+
+	// Role identifiers
+	private static final String ADMIN_ROLE = "ROLE001";
+	private static final Set<String> ADMIN_ROLES = new HashSet<>(Collections.singletonList(ADMIN_ROLE));
+
+	/**
+	 * Checks if a user has a specific permission. For admin users, automatically
+	 * grants all permissions. For other users, checks their specific permissions.
+	 *
+	 * @param userId       User ID to check
+	 * @param permissionId Permission ID to verify
+	 * @return true if user has the permission
+	 */
+	public static boolean hasPermission(String userId, String permissionId) {
+		 try {
+		        // This call is returning null for USER001
+		        UserRole userRole = userRoleBUS.getRoleById(userId);
+		        if (userRole == null) {
+		            LOGGER.warning("No role found for user: " + userId);
+		            return false;
+		        }
+
+			// Admin users have all permissions
+			if (ADMIN_ROLES.contains(userRole.getRoleID())) {
+				return true;
+			}
+
+			// Check specific permissions for non-admin users
+			List<String> permissions = parsePermissions(userRole.getPermissions());
+			return permissions.contains(permissionId);
+
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Error checking permission for user: " + userId, e);
+			return false;
+		}
+	}
+
+	/**
+	 * Parses JSON permission string into a List of permission IDs. Handles various
+	 * edge cases and malformed input.
+	 *
+	 * @param jsonPermissions JSON string of permissions from database
+	 * @return List of permission IDs
+	 */
+	public static List<String> parsePermissions(String jsonPermissions) {
+		List<String> permissions = new ArrayList<>();
+
+		if (jsonPermissions == null || jsonPermissions.isEmpty()) {
+			return permissions;
+		}
+
+		try {
+			// Remove brackets and split by comma
+			String content = jsonPermissions.trim().replace("[", "").replace("]", "").replace("\"", "").replace("'",
+					"");
+
+			if (content.isEmpty()) {
+				return permissions;
+			}
+
+			// Split and clean each permission ID
+			return Arrays.stream(content.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+					.collect(Collectors.toList());
+
+		} catch (Exception e) {
+			LOGGER.log(Level.WARNING, "Error parsing permissions JSON: " + jsonPermissions, e);
+			return permissions;
+		}
+	}
+
+	/**
+	 * Converts a List of permission IDs into a JSON array string.
+	 *
+	 * @param permissions List of permission IDs
+	 * @return JSON formatted string of permissions
+	 */
+	public static String formatPermissionsToJson(List<String> permissions) {
+		if (permissions == null || permissions.isEmpty()) {
+			return "[]";
+		}
+
+		return permissions.stream().map(perm -> "\"" + perm + "\"").collect(Collectors.joining(",", "[", "]"));
+	}
+
+	/**
+	 * Updates permissions for a specific role. Validates permissions before
+	 * updating and logs changes.
+	 *
+	 * @param roleId         Role ID to update
+	 * @param newPermissions New list of permissions
+	 */
+	public static void updateRolePermissions(String roleId, List<String> newPermissions) {
+		try {
+			// Validate permissions against known valid permissions
+			List<String> validPermissions = newPermissions.stream().filter(PERMISSION_DISPLAY_NAMES::containsKey)
+					.collect(Collectors.toList());
+
+			// Convert to JSON and update
+			String jsonPermissions = formatPermissionsToJson(validPermissions);
+			userRoleBUS.updatePermissions(roleId, jsonPermissions);
+
+			LOGGER.info("Updated permissions for role " + roleId + ": " + jsonPermissions);
+
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Error updating role permissions for role: " + roleId, e);
+			throw new RuntimeException("Failed to update permissions", e);
+		}
+	}
+	
+
+	/**
+	 * Gets all valid permissions with their descriptions. Useful for building
+	 * permission management UIs.
+	 *
+	 * @return List of permission details as Maps
+	 */
+	public static List<Map<String, String>> getAllPermissions() {
+		return PERMISSION_DISPLAY_NAMES.entrySet().stream().map(entry -> {
+			Map<String, String> permission = new HashMap<>();
+			permission.put("id", entry.getKey());
+			permission.put("description", entry.getValue());
+			return permission;
+		}).collect(Collectors.toList());
+	}
+
+	/**
+	 * Gets the description for a specific permission ID.
+	 *
+	 * @param permissionId Permission ID to look up
+	 * @return Description of the permission or null if not found
+	 */
+	public static String getPermissionDescription(String permissionId) {
+		return PERMISSION_DISPLAY_NAMES.get(permissionId);
+	}
+
+	/**
+	 * Checks if a user has multiple permissions. All permissions must be present
+	 * for this to return true.
+	 *
+	 * @param userId        User ID to check
+	 * @param permissionIds Variable number of permission IDs to check
+	 * @return true if user has all specified permissions
+	 */
+	public static boolean hasAllPermissions(String userId, String... permissionIds) {
+		return Arrays.stream(permissionIds).allMatch(permissionId -> hasPermission(userId, permissionId));
+	}
+
+	/**
+	 * Checks if a user has any of the specified permissions. Returns true if at
+	 * least one permission is present.
+	 *
+	 * @param userId        User ID to check
+	 * @param permissionIds Variable number of permission IDs to check
+	 * @return true if user has any of the specified permissions
+	 */
+	public static boolean hasAnyPermission(String userId, String... permissionIds) {
+		return Arrays.stream(permissionIds).anyMatch(permissionId -> hasPermission(userId, permissionId));
+	}
+
+	/**
+	 * Checks if a user is an administrator.
+	 *
+	 * @param userId User ID to check
+	 * @return true if user has an admin role
+	 */
+	public static boolean isAdmin(String userId) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			return userRole != null && ADMIN_ROLES.contains(userRole.getRoleID());
+		} catch (Exception e) {
+			LOGGER.log(Level.WARNING, "Error checking admin status for user: " + userId, e);
+			return false;
+		}
+	}
+}

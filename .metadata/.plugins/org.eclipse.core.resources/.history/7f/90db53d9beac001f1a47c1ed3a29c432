@@ -1,0 +1,36 @@
+package gui;
+
+import java.awt.*;
+import javax.swing.*;
+
+import component.CustomTabbedPane;
+import component.EmployeeManagementTab;
+import component.PermissionManagementTab;
+
+
+public class Form_NhanVien extends JPanel {
+    private JTabbedPane tabbedPane;
+    
+    public Form_NhanVien() {
+        setLayout(new BorderLayout());
+        initComponents();
+    }
+
+    private void initComponents() {
+        setBackground(Color.WHITE);
+        tabbedPane = new CustomTabbedPane();
+        
+        // Initialize tabs
+        EmployeeManagementTab employeeTab = new EmployeeManagementTab();
+        PermissionManagementTab permissionTab = new PermissionManagementTab();
+        AccountManagementTab accountTab = new AccountManagementTab();
+        
+        // Add tabs
+        tabbedPane.addTab("Quản lý nhân viên", employeeTab);
+        tabbedPane.addTab("Phân quyền", permissionTab);
+        tabbedPane.addTab("Tài khoản", accountTab);
+        
+        add(tabbedPane, BorderLayout.CENTER);
+        setOpaque(true);
+    }
+}

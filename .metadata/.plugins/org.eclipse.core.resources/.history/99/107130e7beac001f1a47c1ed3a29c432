@@ -1,0 +1,35 @@
+package component;
+
+public class AccountManagementTab extends AbstractManagementTab{
+	 public AccountManagementTab() {
+	        super("Tài khoản",
+	            new String[]{"Mã NV", "Tên đăng nhập", "Nhóm quyền", "Trạng thái"},
+	            createSampleAccountData());
+	    }
+
+	    @Override
+	    protected void handleAdd() {
+	        showDialog("Thêm tài khoản mới");
+	    }
+
+	    @Override
+	    protected void handleEdit() {
+	        if (isRowSelected()) {
+	            showDialog("Chỉnh sửa tài khoản");
+	        }
+	    }
+
+	    private void showDialog(String title) {
+	        JOptionPane.showMessageDialog(this,
+	            "Chức năng " + title + " sẽ được thực hiện tại đây",
+	            title,
+	            JOptionPane.INFORMATION_MESSAGE);
+	    }
+
+	    private static Object[][] createSampleAccountData() {
+	        return new Object[][] {
+	            {"NV001", "admin", "Quản lí", "Đang hoạt động"},
+	            {"NV002", "user", "Nhân viên", "Đang hoạt động"}
+	        };
+	    }
+}

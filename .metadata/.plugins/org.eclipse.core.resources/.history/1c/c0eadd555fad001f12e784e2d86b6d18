@@ -1,0 +1,191 @@
+package dao;
+
+import entity.SanPham;
+import entity.DanhMuc;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class SanPhamDAO {
+    // Using MyConnection for database connectivity
+    private MyConnection myConnection;
+    private DanhMucDAO danhMucDAO;
+
+    public SanPhamDAO() {
+        // Initialize the connection and dependent DAOs
+        myConnection = new MyConnection();
+        danhMucDAO = new DanhMucDAO();
+    }
+
+    public List<SanPham> getAllSanPham() {
+        List<SanPham> danhSachSanPham = new ArrayList<>();
+        String sql = "SELECT * FROM product WHERE status = 'active'";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql);
+             ResultSet rs = pst.executeQuery()) {
+
+            while (rs.next()) {
+                SanPham sanPham = createSanPhamFromResultSet(rs);
+                danhSachSanPham.add(sanPham);
+            }
+            return danhSachSanPham;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    public SanPham getSanPhamById(String maSP) {
+        String sql = "SELECT * FROM product WHERE productID = ? AND status = 'active'";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, maSP);
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                return createSanPhamFromResultSet(rs);
+            }
+            return null;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    public boolean addSanPham(SanPham sanPham) {
+        // Using the stored procedure for adding products
+        String sql = "CALL sp_AddProduct(?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            setPreparedStatementParameters(pst, sanPham);
+            return pst.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    public boolean updateSanPham(SanPham sanPham) {
+        // Using the stored procedure for updating products
+        String sql = "CALL sp_UpdateProduct(?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            setPreparedStatementParameters(pst, sanPham);
+            pst.setString(8, sanPham.getTinhtrang());
+            return pst.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    public boolean deleteSanPham(String maSP) {
+        // Using the stored procedure for soft deleting products
+        String sql = "CALL sp_DeleteProduct(?)";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, maSP);
+            return pst.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    public List<SanPham> searchSanPham(String keyword, String searchType) {
+        List<SanPham> ketQua = new ArrayList<>();
+        String sql = buildSearchQuery(searchType);
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, "%" + keyword + "%");
+            ResultSet rs = pst.executeQuery();
+
+            while (rs.next()) {
+                SanPham sanPham = createSanPhamFromResultSet(rs);
+                ketQua.add(sanPham);
+            }
+            return ketQua;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        } finally {
+            myConnection.closeConnection();
+        }
+    }
+
+    // Helper method to create SanPham object from ResultSet
+    private SanPham createSanPhamFromResultSet(ResultSet rs) throws SQLException {
+        SanPham sanPham = new SanPham();
+        sanPham.setMaSP(rs.getString("productID"));
+        sanPham.setTenSP(rs.getString("name"));
+        
+        // Get category information
+        String maDM = rs.getString("category");
+        DanhMuc danhMuc = danhMucDAO.getDanhMucById(maDM);
+        sanPham.setDanhmuc(danhMuc);
+        
+        sanPham.setSoLuongTonKho(rs.getInt("stockQuantity"));
+        sanPham.setGiaNhap(rs.getDouble("importPrice"));
+        sanPham.setGiaBan(rs.getDouble("sellPrice"));
+        sanPham.setThuongHieu(rs.getString("brand"));
+        sanPham.setHinhAnh(rs.getString("imagePath"));
+        sanPham.setTinhTrang(rs.getString("status"));
+        
+        return sanPham;
+    }
+
+    // Helper method to set prepared statement parameters
+    private void setPreparedStatementParameters(PreparedStatement pst, SanPham sanPham) throws SQLException {
+        pst.setString(1, sanPham.getMaSP());
+        pst.setString(2, sanPham.getTenSP());
+        pst.setString(3, sanPham.getDanhMuc().getMaDM());
+        pst.setDouble(4, sanPham.getGiaNhap());
+        pst.setDouble(5, sanPham.getGiaBan());
+        pst.setString(6, sanPham.getThuongHieu());
+        pst.setString(7, sanPham.getHinhAnh());
+    }
+
+    // Helper method to build search query
+    private String buildSearchQuery(String searchType) {
+        String baseQuery = "SELECT * FROM product WHERE status = 'active' AND ";
+        
+        switch (searchType) {
+            case "Theo Mã":
+                return baseQuery + "productID LIKE ?";
+            case "Tên SP":
+                return baseQuery + "name LIKE ?";
+            case "Thương Hiệu":
+                return baseQuery + "brand LIKE ?";
+            default:
+                return baseQuery + "name LIKE ?";
+        }
+    }
+}

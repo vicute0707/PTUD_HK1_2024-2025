@@ -1,0 +1,134 @@
+package service;
+
+import entity.UserRole;
+import java.util.ArrayList;
+import java.util.List;
+
+import bus.UserRoleBUS;
+
+import java.util.Arrays;
+
+public class PermissionChecker {
+	// Constants for module names matching UI checkboxes
+	public static final String NGUOIDUNG = "Quản lý người dùng";
+	public static final String SANPHAM = "Quản lý sản phẩm";
+	public static final String KHO = "Quản lý kho";
+	public static final String BANHANG = "Quản lý bán hàng";
+	public static final String NHAPHANG = "Quản lý nhập hàng";
+	public static final String BAOCAO = "Quản lý báo cáo";
+	public static final String PHANQUYEN = "Quản lý phân quyền";
+
+	private static UserRoleBUS userRoleBUS = new UserRoleBUS();
+
+	/**
+	 * Chuyển đổi chuỗi JSON permissions thành List<String> Ví dụ: ["Quản lý người
+	 * dùng", "Quản lý sản phẩm"] -> List các permission
+	 */
+	private static List<String> parsePermissions(String jsonPermissions) {
+		if (jsonPermissions == null || jsonPermissions.isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		// Remove brackets and quotes, then split by comma
+		String cleaned = jsonPermissions.replace("[", "").replace("]", "").replace("\"", "").trim();
+
+		if (cleaned.isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		return Arrays.asList(cleaned.split(","));
+	}
+
+	/**
+	 * Chuyển đổi List<String> permissions thành chuỗi JSON Dùng khi cần lưu
+	 * permissions vào database
+	 */
+	public static String formatPermissionsToJson(List<String> permissions) {
+		if (permissions == null || permissions.isEmpty()) {
+			return "[]";
+		}
+
+		StringBuilder json = new StringBuilder("[");
+		for (int i = 0; i < permissions.size(); i++) {
+			if (i > 0) {
+				json.append(",");
+			}
+			json.append("\"").append(permissions.get(i)).append("\"");
+		}
+		json.append("]");
+
+		return json.toString();
+	}
+
+	/**
+	 * Kiểm tra quyền của người dùng với một module cụ thể
+	 */
+	public static boolean hasPermission(String userId, String moduleName) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null)
+				return false;
+
+			List<String> permissions = parsePermissions(userRole.getPermissions());
+			return permissions.contains(moduleName);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Kiểm tra nhiều quyền cùng lúc
+	 */
+	public static boolean hasMultiplePermissions(String userId, String... moduleNames) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null)
+				return false;
+
+			List<String> userPermissions = parsePermissions(userRole.getPermissions());
+
+			// Kiểm tra từng quyền yêu cầu
+			for (String required : moduleNames) {
+				if (!userPermissions.contains(required)) {
+					return false;
+				}
+			}
+			return true;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Lấy danh sách quyền của người dùng
+	 */
+	public static List<String> getUserPermissions(String userId) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null) {
+				return new ArrayList<>();
+			}
+			return parsePermissions(userRole.getPermissions());
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ArrayList<>();
+		}
+	}
+
+	/**
+	 * Cập nhật quyền cho một vai trò Dùng khi lưu thay đổi từ form phân quyền
+	 */
+	public static void updateRolePermissions(String roleId, List<String> newPermissions) {
+		try {
+			// Chuyển List permissions thành chuỗi JSON
+			String jsonPermissions = formatPermissionsToJson(newPermissions);
+
+			// Cập nhật vào database qua UserRoleBUS
+			userRoleBUS.updatePermissions(roleId, jsonPermissions);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+}

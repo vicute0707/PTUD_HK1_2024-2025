@@ -1,0 +1,95 @@
+package dialog;
+
+import javax.swing.*;
+import java.awt.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import entity.User;
+import bus.UserBUS;
+
+public class EmployeeDialog extends JDialog {
+    private final User user;
+    private final boolean isNew;
+    private boolean confirmed = false;
+    
+    private JTextField txtFullName;
+    private JComboBox<String> cboGender;
+    private JTextField txtBirthDate;
+    private JTextField txtPhone;
+    private JTextField txtEmail;
+    private JComboBox<String> cboRole;
+
+    public EmployeeDialog(Frame owner, String title, User user, boolean isNew) {
+        super(owner, title, true);
+        this.user = user;
+        this.isNew = isNew;
+        initComponents();
+    }
+
+    private void initComponents() {
+        setLayout(new BorderLayout(5, 5));
+        
+        // Input panel
+        JPanel inputPanel = new JPanel(new GridLayout(6, 2, 5, 5));
+        inputPanel.add(new JLabel("Họ tên:"));
+        txtFullName = new JTextField(user.getFullName());
+        inputPanel.add(txtFullName);
+
+        inputPanel.add(new JLabel("Giới tính:"));
+        cboGender = new JComboBox<>(new String[]{"Nam", "Nữ"});
+        cboGender.setSelectedItem(user.getGender());
+        inputPanel.add(cboGender);
+
+        inputPanel.add(new JLabel("Ngày sinh (yyyy-MM-dd):"));
+        txtBirthDate = new JTextField(user.getBirthDate() != null ? 
+            new SimpleDateFormat("yyyy-MM-dd").format(user.getBirthDate()) : "");
+        inputPanel.add(txtBirthDate);
+
+        inputPanel.add(new JLabel("SDT:"));
+        txtPhone = new JTextField(user.getPhone());
+        inputPanel.add(txtPhone);
+
+        inputPanel.add(new JLabel("Email:"));
+        txtEmail = new JTextField(user.getEmail());
+        inputPanel.add(txtEmail);
+
+        inputPanel.add(new JLabel("Vai trò:"));
+        cboRole = new JComboBox<>(new String[]{"Admin", "Nhân viên kho", "Nhân viên bán hàng"});
+        cboRole.setSelectedItem(user.getRole());
+        inputPanel.add(cboRole);
+
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnSave = new JButton("Lưu");
+        btnSave.addActionListener(e -> save());
+        JButton btnCancel = new JButton("Hủy");
+        btnCancel.addActionListener(e -> dispose());
+        buttonPanel.add(btnSave);
+        buttonPanel.add(btnCancel);
+
+        add(inputPanel, BorderLayout.CENTER);
+        add(buttonPanel, BorderLayout.SOUTH);
+        pack();
+        setLocationRelativeTo(getOwner());
+    }
+
+    private void save() {
+        try {
+            user.setFullName(txtFullName.getText());
+            user.setGender(cboGender.getSelectedItem().toString());
+            user.setBirthDate(new SimpleDateFormat("yyyy-MM-dd").parse(txtBirthDate.getText()));
+            user.setPhone(txtPhone.getText());
+            user.setEmail(txtEmail.getText());
+            user.setRole(cboRole.getSelectedItem().toString());
+            
+            confirmed = true;
+            dispose();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    public boolean isConfirmed() {
+        return confirmed;
+    }
+}

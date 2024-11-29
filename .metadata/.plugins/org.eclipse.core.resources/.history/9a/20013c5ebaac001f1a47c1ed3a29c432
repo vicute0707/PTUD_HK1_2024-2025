@@ -1,0 +1,232 @@
+package dialog;
+
+import com.toedter.calendar.JDateChooser;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.text.SimpleDateFormat;
+import entity.User;
+import java.util.Date;
+
+public class ThemNhanVienDialog extends JDialog {
+    private JTextField txtMaNV;
+    private JTextField txtHoTen;
+    private JComboBox<String> cboGioiTinh;
+    private JDateChooser dateChooser;
+    private JTextField txtSDT;
+    private JTextField txtEmail;
+    private JComboBox<String> cboRole;
+    private JTextField txtUsername;
+    private JPasswordField txtPassword;
+    
+    private boolean isAccepted = false;
+    private User user = null;
+    
+    public ThemNhanVienDialog(Frame parent) {
+        super(parent, "Thêm Nhân Viên Mới", true);
+        initComponents();
+    }
+    
+    private void initComponents() {
+        // Main panel
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Form panel
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        
+        // Initialize components
+        txtMaNV = new JTextField(20);
+        txtMaNV.setEditable(false); // Auto-generated
+        txtHoTen = new JTextField(20);
+        cboGioiTinh = new JComboBox<>(new String[]{"Nam", "Nữ"});
+        dateChooser = new JDateChooser();
+        dateChooser.setDateFormatString("dd/MM/yyyy");
+        txtSDT = new JTextField(20);
+        txtEmail = new JTextField(20);
+        cboRole = new JComboBox<>(new String[]{"Quản lý", "Nhân viên"});
+        txtUsername = new JTextField(20);
+        txtPassword = new JPasswordField(20);
+        
+        // Add components to form panel
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("Mã nhân viên:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtMaNV, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("Họ và tên:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtHoTen, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("Giới tính:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(cboGioiTinh, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("Ngày sinh:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(dateChooser, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("Số điện thoại:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtSDT, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 5;
+        formPanel.add(new JLabel("Email:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtEmail, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 6;
+        formPanel.add(new JLabel("Chức vụ:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(cboRole, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 7;
+        formPanel.add(new JLabel("Tên đăng nhập:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtUsername, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 8;
+        formPanel.add(new JLabel("Mật khẩu:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(txtPassword, gbc);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        JButton btnSave = new JButton("Lưu");
+        JButton btnCancel = new JButton("Hủy");
+        
+        btnSave.addActionListener(e -> handleSave());
+        btnCancel.addActionListener(e -> handleCancel());
+        
+        buttonPanel.add(btnSave);
+        buttonPanel.add(btnCancel);
+        
+        // Add panels to main panel
+        mainPanel.add(formPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Set dialog properties
+        setContentPane(mainPanel);
+        pack();
+        setLocationRelativeTo(getParent());
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        
+        // Generate MaNV
+        generateMaNV();
+    }
+    
+    private void generateMaNV() {
+        // This should be replaced with actual logic to generate unique ID
+        SimpleDateFormat sdf = new SimpleDateFormat("yyMMdd");
+        String date = sdf.format(new Date());
+        txtMaNV.setText("NV" + date + "001");
+    }
+    
+    private void handleSave() {
+        if (!validateInput()) {
+            return;
+        }
+        
+        user = new User();
+        user.setUserID(txtMaNV.getText());
+        user.setUsername(txtUsername.getText());
+        user.setPassword(new String(txtPassword.getPassword()));
+        user.setFullName(txtHoTen.getText());
+        user.setGender(cboGioiTinh.getSelectedItem().toString());
+        user.setBirthDate(dateChooser.getDate());
+        user.setPhone(txtSDT.getText());
+        user.setEmail(txtEmail.getText());
+        user.setRole(cboRole.getSelectedItem().toString());
+        user.setStatus("active");
+        
+        isAccepted = true;
+        dispose();
+    }
+    
+    private void handleCancel() {
+        isAccepted = false;
+        dispose();
+    }
+    
+    private boolean validateInput() {
+        // Validate required fields
+        if (txtHoTen.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, 
+                "Vui lòng nhập họ tên", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (dateChooser.getDate() == null) {
+            JOptionPane.showMessageDialog(this, 
+                "Vui lòng chọn ngày sinh", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (txtUsername.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, 
+                "Vui lòng nhập tên đăng nhập", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (txtPassword.getPassword().length == 0) {
+            JOptionPane.showMessageDialog(this, 
+                "Vui lòng nhập mật khẩu", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        // Validate phone number format
+        String phone = txtSDT.getText().trim();
+        if (!phone.isEmpty() && !phone.matches("\\d{10}")) {
+            JOptionPane.showMessageDialog(this, 
+                "Số điện thoại không hợp lệ", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        // Validate email format
+        String email = txtEmail.getText().trim();
+        if (!email.isEmpty() && !email.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+            JOptionPane.showMessageDialog(this, 
+                "Email không hợp lệ", 
+                "Lỗi", 
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        return true;
+    }
+    
+    public boolean isAccepted() {
+        return isAccepted;
+    }
+    
+    public User getUser() {
+        return user;
+    }
+    
+    // Helper method to show dialog and get result
+    public static User showDialog(Frame parent) {
+        ThemNhanVienDialog dialog = new ThemNhanVienDialog(parent);
+        dialog.setVisible(true);
+        if (dialog.isAccepted()) {
+            return dialog.getUser();
+        }
+        return null;
+    }
+}

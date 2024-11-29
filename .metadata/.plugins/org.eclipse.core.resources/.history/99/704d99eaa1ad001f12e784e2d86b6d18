@@ -1,0 +1,636 @@
+package gui;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+import com.toedter.calendar.JDateChooser;
+import component.CreateDateChooser;
+import component.ShowSuccessDialog;
+import dialog.ChiTietPhieuNhap;
+import entity.UserSession;
+import service.PermissionChecker;
+import style.*;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.text.NumberFormat;
+import java.util.Date;
+
+/**
+ * A comprehensive form for managing purchase orders (Quản lý đơn nhập). This
+ * form provides functionality for viewing, filtering, adding, and managing
+ * purchase orders with proper permission checks and user-friendly interface.
+ */
+public class QuanLyDonNhap extends JPanel {
+	// Visual styling constants
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color CONTENT_COLOR = new Color(255, 242, 242);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 14);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+
+	// Main components
+	private JTable table;
+	private DefaultTableModel tableModel;
+	private JTextField searchField;
+	private JFormattedTextField fromAmountField;
+	private JFormattedTextField toAmountField;
+	private JDateChooser fromDateChooser;
+	private JDateChooser toDateChooser;
+	private JComboBox<String> supplierCombo;
+	private JLabel totalRecordsValue;
+	private JLabel totalAmountValue;
+	private CreateFilter createFilter;
+
+	public QuanLyDonNhap() {
+		createFilter = new CreateFilter();
+		initializeComponents();
+		setupLayout();
+		loadSampleData();
+		addTableDoubleClickHandler();
+	}
+
+	/**
+	 * Initializes all form components with proper styling and configuration
+	 */
+	private void initializeComponents() {
+		// Initialize summary labels
+		totalRecordsValue = new JLabel("0");
+		totalRecordsValue.setFont(HEADER_FONT);
+		totalRecordsValue.setForeground(PRIMARY_COLOR);
+
+		totalAmountValue = new JLabel("0 VND");
+		totalAmountValue.setFont(HEADER_FONT);
+		totalAmountValue.setForeground(PRIMARY_COLOR);
+
+		// Set up the table with proper columns and styling
+		String[] columns = { "STT", "Mã đơn nhập", "Nhà cung cấp", "Thời gian", "Tổng tiền" };
+		tableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		table = new JTable(tableModel);
+		setupTable();
+
+		// Create search field with styling
+		searchField = new JTextField();
+		searchField.setPreferredSize(new Dimension(220, 35));
+		searchField.setFont(CONTENT_FONT);
+
+		// Initialize filter components
+		initializeFilterComponents();
+	}
+
+	/**
+	 * Sets up the table with proper styling and column configurations
+	 */
+	private void setupTable() {
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(40);
+		table.setGridColor(new Color(245, 245, 245));
+		table.setSelectionBackground(HOVER_COLOR);
+		table.setSelectionForeground(Color.BLACK);
+		table.setShowVerticalLines(true);
+		table.setShowHorizontalLines(true);
+
+		// Configure column widths
+		int[] columnWidths = { 50, 150, 200, 150, 200 };
+		for (int i = 0; i < columnWidths.length; i++) {
+			table.getColumnModel().getColumn(i).setPreferredWidth(columnWidths[i]);
+		}
+
+		// Style the table header
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 45));
+		header.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(230, 230, 230)));
+
+		// Configure cell renderers for alignment
+		setupCellRenderers();
+	}
+
+	/**
+	 * Sets up cell renderers for proper alignment of different types of data
+	 */
+	private void setupCellRenderers() {
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		// Center align numeric and code columns
+		table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // STT
+		table.getColumnModel().getColumn(1).setCellRenderer(centerRenderer); // Mã đơn nhập
+		table.getColumnModel().getColumn(3).setCellRenderer(centerRenderer); // Thời gian
+
+		// Right align monetary values
+		DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+		rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
+		table.getColumnModel().getColumn(4).setCellRenderer(rightRenderer); // Tổng tiền
+	}
+
+	/**
+	 * Initializes filter components with proper styling
+	 */
+	private void initializeFilterComponents() {
+		// Set up supplier combo box
+		supplierCombo = new JComboBox<>(new String[] { "Tất cả", "Công ty ABC", "Nhà cung cấp XYZ", "Đại lý DEF" });
+		StyleComboBox styleComboBox = new StyleComboBox();
+		styleComboBox.styleComboBox(supplierCombo);
+
+		// Set up date choosers
+		CreateDateChooser dateStyle = new CreateDateChooser();
+		fromDateChooser = dateStyle.createDateChooser();
+		toDateChooser = dateStyle.createDateChooser();
+
+		// Set up amount fields with proper formatting
+		NumberFormat format = NumberFormat.getIntegerInstance();
+		format.setGroupingUsed(true);
+		fromAmountField = new JFormattedTextField(format);
+		toAmountField = new JFormattedTextField(format);
+		createFilter.styleFormattedTextField(fromAmountField);
+		createFilter.styleFormattedTextField(toAmountField);
+	}
+
+	/**
+	 * Creates the top panel containing search and action buttons
+	 */
+	private JPanel createTopPanel() {
+		JPanel panel = new JPanel(new BorderLayout(20, 0));
+		panel.setBackground(Color.WHITE);
+
+		// Create search panel
+		JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+		searchPanel.setBackground(Color.WHITE);
+		searchPanel.add(searchField);
+		searchPanel.add(createFilter.createSearchButton());
+
+		// Create action buttons panel
+		JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+		actionPanel.setBackground(Color.WHITE);
+		CreateActionButton createActionButton = new CreateActionButton();
+
+		// Get current user for permission checking
+		String currentUserId = UserSession.getInstance().getCurrentUser().getUserID();
+
+		// Add action buttons with proper permissions
+		addActionButtons(actionPanel, createActionButton, currentUserId);
+
+		panel.add(searchPanel, BorderLayout.WEST);
+		panel.add(actionPanel, BorderLayout.EAST);
+
+		return panel;
+	}
+
+	/**
+	 * Adds action buttons to the panel with proper permission checks
+	 */
+	private void addActionButtons(JPanel actionPanel, CreateActionButton createActionButton, String currentUserId) {
+		// Add Purchase Order Button
+		JButton addButton = createActionButton.createActionButton("Thêm đơn nhập", "/icon/circle-plus.png", true, true);
+		configureButtonWithPermission(addButton, currentUserId, PermissionChecker.NHAPHANG, () -> {
+			Container mainContent = QuanLyDonNhap.this.getParent();
+			mainContent.removeAll();
+			ThemDonNhap addPanel = new ThemDonNhap();
+			mainContent.add(addPanel, BorderLayout.CENTER);
+			mainContent.revalidate();
+			mainContent.repaint();
+		});
+		addButton.setPreferredSize(new Dimension(160, 38));
+
+		// Delete Button
+		JButton deleteButton = createActionButton.createActionButton("Xóa", "/icon/trash.png", true, false);
+		configureButtonWithPermission(deleteButton, currentUserId, PermissionChecker.NHAPHANG, this::deleteRecord);
+
+		// About Button
+		JButton aboutButton = createActionButton.createActionButton("About", "/icon/info.png", true, false);
+		ChiTietPhieuNhap chiTietPhieuNhap = new ChiTietPhieuNhap();
+		configureButtonWithPermission(aboutButton, currentUserId, PermissionChecker.NHAPHANG,
+				() -> chiTietPhieuNhap.viewDetail(table));
+
+		// Export Button
+		JButton exportButton = createActionButton.createActionButton("Xuất Excel", "/icon/printer.png", true, false);
+		configureButtonWithPermission(exportButton, currentUserId, PermissionChecker.BAOCAO, this::exportToExcel);
+		exportButton.setPreferredSize(new Dimension(160, 38));
+
+		// Add all buttons to panel
+		actionPanel.add(addButton);
+		actionPanel.add(deleteButton);
+		actionPanel.add(aboutButton);
+		actionPanel.add(exportButton);
+	}
+
+	/**
+	 * Configures button permissions and actions
+	 */
+	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
+		if (PermissionChecker.hasPermission(userId, permission)) {
+			button.setEnabled(true);
+			button.addActionListener(e -> {
+				if (button.isEnabled()) {
+					action.run();
+				}
+			});
+		} else {
+			button.setEnabled(false);
+			button.setToolTipText("Bạn không có quyền " + permission.toLowerCase());
+		}
+	}
+
+	/**
+	 * Creates the filter panel with all filtering options
+	 */
+	private JPanel createFilterPanel() {
+		JPanel filterPanel = new JPanel();
+		filterPanel.setLayout(new BoxLayout(filterPanel, BoxLayout.Y_AXIS));
+		filterPanel.setBackground(CONTENT_COLOR);
+		filterPanel.setBorder(BorderFactory.createCompoundBorder(new EmptyBorder(0, 0, 0, 0), BorderFactory
+				.createCompoundBorder(new LineBorder(PRIMARY_COLOR, 0, true), new EmptyBorder(20, 20, 20, 20))));
+		filterPanel.setPreferredSize(new Dimension(350, 200));
+
+		// Add filter components
+		filterPanel.add(createFilter.createFilterTitle());
+		filterPanel.add(Box.createVerticalStrut(20));
+		filterPanel.add(createFilter.createFilterField("Nhà cung cấp", supplierCombo));
+		filterPanel.add(Box.createVerticalStrut(15));
+		filterPanel.add(createDateFilterPanel());
+		filterPanel.add(Box.createVerticalStrut(15));
+		filterPanel.add(createAmountFilterPanel());
+		filterPanel.add(Box.createVerticalStrut(25));
+		filterPanel.add(createFilter.createFilterButtonsPanel());
+
+		return filterPanel;
+	}
+
+	/**
+	 * Creates the date filter panel with from and to date choosers
+	 */
+	private JPanel createDateFilterPanel() {
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBackground(CONTENT_COLOR);
+		panel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JLabel titleLabel = new JLabel("Thời gian");
+		titleLabel.setFont(CONTENT_FONT);
+		titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JPanel dateChoosersPanel = new JPanel();
+		dateChoosersPanel.setLayout(new BoxLayout(dateChoosersPanel, BoxLayout.Y_AXIS));
+		dateChoosersPanel.setBackground(CONTENT_COLOR);
+
+		// Add date choosers with labels
+		dateChoosersPanel.add(createFilter.createDateChooserPanel("Từ ngày:", fromDateChooser));
+		dateChoosersPanel.add(Box.createVerticalStrut(5));
+		dateChoosersPanel.add(createFilter.createDateChooserPanel("Đến ngày:", toDateChooser));
+
+		panel.add(titleLabel);
+		panel.add(Box.createVerticalStrut(8));
+		panel.add(dateChoosersPanel);
+
+		return panel;
+	}
+
+	/**
+	 * Creates the amount filter panel with from and to amount fields
+	 */
+	private JPanel createAmountFilterPanel() {
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBackground(CONTENT_COLOR);
+		panel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JLabel titleLabel = new JLabel("Khoảng tiền (VND)");
+		titleLabel.setFont(CONTENT_FONT);
+		titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JPanel fieldsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+		fieldsPanel.setBackground(CONTENT_COLOR);
+
+		// Configure amount fields
+		fromAmountField.setPreferredSize(new Dimension(120, 35));
+		toAmountField.setPreferredSize(new Dimension(120, 35));
+
+		fieldsPanel.add(fromAmountField);
+		fieldsPanel.add(new JLabel("—"));
+		fieldsPanel.add(toAmountField);
+
+		panel.add(titleLabel);
+		panel.add(Box.createVerticalStrut(12));
+		panel.add(fieldsPanel);
+
+		return panel;
+	}
+
+	/**
+	 * Creates the main panel containing the table and summary
+	 */
+	private JPanel createMainPanel() {
+		JPanel mainPanel = new JPanel(new BorderLayout(0, 20));
+		mainPanel.setBackground(Color.WHITE);
+
+		// Create scroll pane with custom styling
+		JScrollPane scrollPane = new JScrollPane(table);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+		scrollPane.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+
+		// Add custom scroll bar UI
+		CustomScrollBarUI customScrollBarUI = new CustomScrollBarUI();
+		scrollPane.getVerticalScrollBar().setUI(customScrollBarUI);
+		scrollPane.getHorizontalScrollBar().setUI(customScrollBarUI);
+
+		mainPanel.add(scrollPane, BorderLayout.CENTER);
+		mainPanel.add(createSummaryPanel(), BorderLayout.SOUTH);
+
+		return mainPanel;
+	}
+
+	/**
+	 * Sets up the main layout of the form
+	 */
+	private void setupLayout() {
+		setLayout(new BorderLayout(0, 20));
+		setBackground(Color.WHITE);
+		setBorder(new EmptyBorder(30, 30, 30, 30));
+
+		add(createTopPanel(), BorderLayout.NORTH);
+		add(createFilterPanel(), BorderLayout.WEST);
+		add(createMainPanel(), BorderLayout.CENTER);
+	}
+
+	/**
+	 * Creates the summary panel showing totals
+	 */
+	private JPanel createSummaryPanel() {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 10));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(230, 230, 230)));
+
+		JLabel totalRecordsLabel = new JLabel("Tổng số đơn: ");
+		totalRecordsLabel.setFont(CONTENT_FONT);
+
+		JLabel totalAmountLabel = new JLabel("Tổng tiền: ");
+		totalAmountLabel.setFont(CONTENT_FONT);
+
+		panel.add(totalRecordsLabel);
+		panel.add(totalRecordsValue);
+		panel.add(Box.createHorizontalStrut(20));
+		panel.add(totalAmountLabel);
+		panel.add(totalAmountValue);
+
+		return panel;
+	}
+
+	/**
+	 * Loads sample data into the table
+	 */
+	private void loadSampleData() {
+		Object[][] data = { { "1", "DN001", "Công ty ABC", "01/11/2023", "15,500,000 VND" },
+				{ "2", "DN002", "Nhà cung cấp XYZ", "02/11/2023", "22,800,000 VND" },
+				{ "3", "DN003", "Đại lý DEF", "03/11/2023", "33,200,000 VND" },
+				{ "4", "DN004", "Công ty ABC", "04/11/2023", "19,900,000 VND" },
+				{ "5", "DN005", "Nhà cung cấp XYZ", "05/11/2023", "28,100,000 VND" } };
+
+		for (Object[] row : data) {
+			tableModel.addRow(row);
+		}
+		updateSummary();
+	}
+
+	/**
+	 * Updates the STT (sequence number) column after table changes
+	 */
+	private void updateSTTColumn() {
+		for (int i = 0; i < tableModel.getRowCount(); i++) {
+			tableModel.setValueAt(String.valueOf(i + 1), i, 0);
+		}
+	}
+
+	/**
+	 * Updates the summary information (total records and amount)
+	 */
+	private void updateSummary() {
+		double totalAmount = 0;
+		for (int i = 0; i < tableModel.getRowCount(); i++) {
+			String amountStr = tableModel.getValueAt(i, 4).toString().replace(" VND", "").replace(",", "");
+			totalAmount += Double.parseDouble(amountStr);
+		}
+
+		NumberFormat currencyFormat = NumberFormat.getNumberInstance();
+		String formattedAmount = currencyFormat.format(totalAmount) + " VND";
+
+		totalRecordsValue.setText(String.valueOf(tableModel.getRowCount()));
+		totalAmountValue.setText(formattedAmount);
+	}
+
+	/**
+	 * Adds double-click handler for viewing purchase order details
+	 */
+	private void addTableDoubleClickHandler() {
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (e.getClickCount() == 2) {
+					ChiTietPhieuNhap chiTietPhieuNhap = new ChiTietPhieuNhap();
+					chiTietPhieuNhap.viewDetail(table);
+				}
+			}
+		});
+	}
+
+	/**
+	 * Handles the deletion of a purchase order
+	 */
+	private void deleteRecord() {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow != -1) {
+			String maDonNhap = table.getValueAt(selectedRow, 1).toString();
+
+			// Create confirmation dialog
+			JDialog confirmDialog = createDeleteConfirmationDialog(maDonNhap);
+
+			// Display dialog
+			confirmDialog.pack();
+			confirmDialog.setLocationRelativeTo(this);
+			confirmDialog.setVisible(true);
+		}
+	}
+
+	/**
+	 * Creates the delete confirmation dialog
+	 */
+	private JDialog createDeleteConfirmationDialog(String maDonNhap) {
+		JDialog confirmDialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Xác nhận xóa", true);
+		confirmDialog.setLayout(new BorderLayout());
+		confirmDialog.setBackground(Color.WHITE);
+
+		// Create content panel
+		JPanel contentPanel = new JPanel();
+		contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+		contentPanel.setBackground(Color.WHITE);
+		contentPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+
+		// Add warning icon and messages
+		setupDeleteDialogContent(contentPanel, maDonNhap);
+
+		// Add button panel
+		JPanel buttonPanel = createDeleteDialogButtons(confirmDialog, maDonNhap);
+
+		// Add panels to dialog
+		confirmDialog.add(contentPanel, BorderLayout.CENTER);
+		confirmDialog.add(buttonPanel, BorderLayout.SOUTH);
+
+		return confirmDialog;
+	}
+
+	/**
+	 * Sets up the content for delete confirmation dialog
+	 */
+	private void setupDeleteDialogContent(JPanel contentPanel, String maDonNhap) {
+		JLabel iconLabel = new JLabel(new ImageIcon(getClass().getResource("/icon/circle-alert.png")));
+		iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JLabel messageLabel = new JLabel("Bạn có chắc muốn xóa đơn nhập " + maDonNhap + "?");
+		messageLabel.setFont(new Font(CONTENT_FONT.getFamily(), Font.BOLD, 14));
+		messageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JLabel subMessageLabel = new JLabel("Hành động này không thể hoàn tác!");
+		subMessageLabel.setFont(CONTENT_FONT);
+		subMessageLabel.setForeground(Color.RED);
+		subMessageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		contentPanel.add(iconLabel);
+		contentPanel.add(Box.createVerticalStrut(15));
+		contentPanel.add(messageLabel);
+		contentPanel.add(Box.createVerticalStrut(5));
+		contentPanel.add(subMessageLabel);
+		contentPanel.add(Box.createVerticalStrut(20));
+	}
+
+	/**
+	 * Creates the button panel for delete confirmation dialog
+	 */
+	private JPanel createDeleteDialogButtons(JDialog dialog, String maDonNhap) {
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+		buttonPanel.setBackground(Color.WHITE);
+
+		JButton deleteButton = createFilter.createDetailButton("Xóa", null, true);
+		JButton cancelButton = createFilter.createDetailButton("Hủy", null, false);
+
+		deleteButton.addActionListener(e -> {
+			int selectedRow = table.getSelectedRow();
+			tableModel.removeRow(selectedRow);
+			updateSTTColumn();
+			updateSummary();
+			dialog.dispose();
+
+			ShowSuccessDialog successDialog = new ShowSuccessDialog();
+			successDialog.showSuccessDialog("Đã xóa đơn nhập " + maDonNhap + " thành công!");
+		});
+
+		cancelButton.addActionListener(e -> dialog.dispose());
+
+		buttonPanel.add(deleteButton);
+		buttonPanel.add(cancelButton);
+
+		return buttonPanel;
+	}
+
+	/**
+	 * Handles exporting data to Excel
+	 */
+	private void exportToExcel() {
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setDialogTitle("Chọn vị trí lưu file Excel");
+		fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Excel Files", "xlsx"));
+
+		if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+			try {
+				String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+				if (!filePath.endsWith(".xlsx")) {
+					filePath += ".xlsx";
+				}
+
+				// Here you would implement actual Excel export logic
+				JOptionPane.showMessageDialog(this, "Xuất Excel thành công: " + filePath, "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(this, "Lỗi khi xuất file Excel: " + ex.getMessage(), "Lỗi",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	/**
+	 * Applies the selected filters to the data
+	 */
+	private void applyFilters() {
+		try {
+			String supplier = supplierCombo.getSelectedItem().toString();
+			Date fromDate = fromDateChooser.getDate();
+			Date toDate = toDateChooser.getDate();
+			Number fromAmount = (Number) fromAmountField.getValue();
+			Number toAmount = (Number) toAmountField.getValue();
+
+			// Clear current table data
+			tableModel.setRowCount(0);
+			// Implement actual filtering logic here
+			loadSampleData();
+			updateSummary();
+
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi áp dụng bộ lọc: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	/**
+	 * Resets all filters to their default values
+	 */
+	private void resetFilters() {
+		supplierCombo.setSelectedIndex(0);
+		fromDateChooser.setDate(null);
+		toDateChooser.setDate(null);
+		fromAmountField.setValue(null);
+		toAmountField.setValue(null);
+		refreshTable();
+	}
+
+	/**
+	 * Refreshes the table data
+	 */
+	private void refreshTable() {
+		tableModel.setRowCount(0);
+		loadSampleData();
+	}
+
+	// Public methods for external access
+
+	public void refresh() {
+		resetFilters();
+		refreshTable();
+	}
+
+	public void clearSelection() {
+		table.clearSelection();
+	}
+
+	public JTable getTable() {
+		return table;
+	}
+}
+
+// I'll continue with the final part of the implementation in the next response.
+// Would you like me to proceed with the remaining methods?
+
+// I'll continue with the rest of the implementation in the next part since
+// there's more to cover.
+// Would you like me to continue with the remaining methods?

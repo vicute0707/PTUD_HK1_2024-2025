@@ -1,0 +1,96 @@
+package export;
+
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import javax.swing.*;
+import javax.swing.table.TableModel;
+import java.awt.Component;
+import java.nio.charset.StandardCharsets;
+
+public class ExcelExporterNV {
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd-MM-yyyy_HH-mm-ss");
+
+    public static void exportToCSV(JTable table, String title, Component parentComponent) {
+        try {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Chọn vị trí lưu file");
+            String defaultFileName = title.toLowerCase().replace(" ", "_") + "_" + 
+                                   DATE_FORMAT.format(new Date()) + ".csv";
+            fileChooser.setSelectedFile(new File(defaultFileName));
+
+            if (fileChooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".csv")) {
+                    file = new File(file.getAbsolutePath() + ".csv");
+                }
+
+                // Thêm BOM để Excel nhận diện UTF-8
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                        new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                    
+                    // Ghi BOM
+                    writer.write('\uFEFF');
+                    
+                    // Ghi tiêu đề báo cáo
+                    writer.write("Báo cáo " + title);
+                    writer.newLine();
+                    writer.write("Ngày xuất: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date()));
+                    writer.newLine();
+                    writer.newLine();
+                    
+                    TableModel model = table.getModel();
+                    
+                    // Ghi header
+                    StringBuilder header = new StringBuilder();
+                    for (int col = 0; col < model.getColumnCount(); col++) {
+                        if (col > 0) header.append(";");
+                        String columnName = model.getColumnName(col);
+                        header.append(escapeSpecialCharacters(columnName));
+                    }
+                    writer.write(header.toString());
+                    writer.newLine();
+
+                    // Ghi dữ liệu
+                    for (int row = 0; row < model.getRowCount(); row++) {
+                        StringBuilder dataRow = new StringBuilder();
+                        for (int col = 0; col < model.getColumnCount(); col++) {
+                            if (col > 0) dataRow.append(";");
+                            Object value = model.getValueAt(row, col);
+                            String cellValue = value != null ? value.toString() : "";
+                            dataRow.append(escapeSpecialCharacters(cellValue));
+                        }
+                        writer.write(dataRow.toString());
+                        writer.newLine();
+                    }
+
+                    JOptionPane.showMessageDialog(
+                        parentComponent,
+                        "Xuất file thành công!\nVị trí: " + file.getAbsolutePath(),
+                        "Thành công",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(
+                parentComponent,
+                "Lỗi khi xuất file: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private static String escapeSpecialCharacters(String value) {
+        // Xử lý các ký tự đặc biệt
+        if (value == null) return "";
+        
+        String result = value;
+        if (result.contains("\"") || result.contains(";") || result.contains("\n")) {
+            result = result.replace("\"", "\"\""); // Escape dấu ngoặc kép
+            result = "\"" + result + "\"";
+        }
+        return result;
+    }
+}

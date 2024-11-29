@@ -1,0 +1,35 @@
+package component;
+
+import javax.swing.*;
+
+import dialog.SuaNhanVienDialog;
+import dialog.ThemNhanVienDialog;
+
+
+public class EmployeeManagementTab extends AbstractManagementTab {
+    public EmployeeManagementTab() {
+        super("Quản lý nhân viên",
+            new String[]{"Mã NV", "Họ và tên", "Giới tính", "Ngày sinh", "SDT", "Email"},
+            createSampleEmployeeData());
+    }
+
+    @Override
+    protected void handleAdd() {
+        new ThemNhanVienDialog(SwingUtilities.getWindowAncestor(this)).setVisible(true);
+    }
+
+    @Override
+    protected void handleEdit() {
+        if (isRowSelected()) {
+            new SuaNhanVienDialog(SwingUtilities.getWindowAncestor(this), 
+                getSelectedRowData()).setVisible(true);
+        }
+    }
+
+    private static Object[][] createSampleEmployeeData() {
+        return new Object[][] {
+            {"NV001", "Nguyễn Văn A", "Nam", "1990-01-01", "0123456789", "nva@email.com"},
+            {"NV002", "Trần Thị B", "Nữ", "1992-02-02", "0987654321", "ttb@email.com"}
+        };
+    }
+}

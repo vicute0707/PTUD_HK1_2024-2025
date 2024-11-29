@@ -1,0 +1,27 @@
+package table;
+
+import java.awt.*;
+import java.text.NumberFormat;
+import java.util.Locale;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+
+import bus.SanPhamBUS;
+import entity.SanPham;
+import style.CustomScrollBarUI;
+
+public class TBL_SP {
+    private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+    private static final Color CONTENT_COLOR = new Color(255, 192, 203);
+    private static final Color HOVER_COLOR = new Color(252, 231, 243);
+    private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+    private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+    
+    private JTable table;
+    private DefaultTableModel tableModel;
+
+  
+}

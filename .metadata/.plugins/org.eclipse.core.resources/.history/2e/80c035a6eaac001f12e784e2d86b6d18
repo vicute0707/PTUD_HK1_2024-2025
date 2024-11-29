@@ -1,0 +1,71 @@
+package bus;
+
+import dao.UserRoleDAO;
+import entity.UserRole;
+import java.util.List;
+
+public class UserRoleBUS {
+	private UserRoleDAO userRoleDAO;
+
+	public UserRoleBUS() {
+		userRoleDAO = new UserRoleDAO();
+	}
+
+	public List<UserRole> getAllRoles() {
+		return userRoleDAO.getAllRoles();
+	}
+
+	public UserRole getRoleById(String id) {
+		return userRoleDAO.getRoleById(id);
+	}
+
+	public boolean addRole(UserRole role) throws Exception {
+		validateRole(role);
+		if (userRoleDAO.isRoleNameExists(role.getRoleName())) {
+			throw new Exception("Tên vai trò đã tồn tại");
+		}
+		return userRoleDAO.addRole(role);
+	}
+
+	public boolean updateRole(UserRole role) throws Exception {
+		validateRole(role);
+		UserRole existingRole = userRoleDAO.getRoleById(role.getRoleID());
+		if (existingRole != null && !existingRole.getRoleName().equals(role.getRoleName())
+				&& userRoleDAO.isRoleNameExists(role.getRoleName())) {
+			throw new Exception("Tên vai trò đã tồn tại");
+		}
+		return userRoleDAO.updateRole(role);
+	}
+
+	public boolean deleteRole(String roleId) throws Exception {
+		if (roleId == null || roleId.trim().isEmpty()) {
+			throw new Exception("Mã vai trò không được để trống");
+		}
+		if (roleId.equals("ROLE001")) {
+			throw new Exception("Không thể xóa vai trò Admin");
+		}
+		return userRoleDAO.deleteRole(roleId);
+	}
+
+	private void validateRole(UserRole role) throws Exception {
+		if (role.getRoleID() == null || role.getRoleID().trim().isEmpty()) {
+			throw new Exception("Mã vai trò không được để trống");
+		}
+		if (role.getRoleName() == null || role.getRoleName().trim().isEmpty()) {
+			throw new Exception("Tên vai trò không được để trống");
+		}
+		if (role.getPermissions() == null || role.getPermissions().isEmpty()) {
+			throw new Exception("Phải chọn ít nhất một quyền");
+		}
+	}
+
+	public String generateNewRoleId() {
+		String lastId = userRoleDAO.getLastRoleId();
+		if (lastId == null) {
+			return "ROLE001";
+		}
+		String numStr = lastId.substring(4);
+		int newNum = Integer.parseInt(numStr) + 1;
+		return String.format("ROLE%03d", newNum);
+	}
+}

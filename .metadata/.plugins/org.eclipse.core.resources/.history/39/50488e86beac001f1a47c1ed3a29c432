@@ -1,0 +1,76 @@
+package component;
+
+public class PermissionManagementTab extends AbstractManagementTab{
+	public PermissionManagementTab() {
+        super("Phân quyền",
+            new String[]{"Mã quyền", "Tên quyền truy cập"},
+            createSamplePermissionData());
+    }
+
+    @Override
+    protected void handleAdd() {
+        showDialog("Thêm quyền mới");
+    }
+
+    @Override
+    protected void handleEdit() {
+        if (isRowSelected()) {
+            showDialog("Chỉnh sửa quyền");
+        }
+    }
+
+    private void showDialog(String title) {
+        JOptionPane.showMessageDialog(this,
+            "Chức năng " + title + " sẽ được thực hiện tại đây",
+            title,
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static Object[][] createSamplePermissionData() {
+        return new Object[][] {
+            {"Q001", "Quản lí cửa hàng"},
+            {"Q002", "Quản lí nhân viên"},
+            {"Q003", "Quản lí kho"},
+            {"Q004", "Quản lí bán hàng"},
+            {"Q005", "Quản lí báo cáo"}
+        };
+    }
+}
+
+// Account Management Tab
+package gui.tabs;
+
+public class AccountManagementTab extends AbstractManagementTab {
+    public AccountManagementTab() {
+        super("Tài khoản",
+            new String[]{"Mã NV", "Tên đăng nhập", "Nhóm quyền", "Trạng thái"},
+            createSampleAccountData());
+    }
+
+    @Override
+    protected void handleAdd() {
+        showDialog("Thêm tài khoản mới");
+    }
+
+    @Override
+    protected void handleEdit() {
+        if (isRowSelected()) {
+            showDialog("Chỉnh sửa tài khoản");
+        }
+    }
+
+    private void showDialog(String title) {
+        JOptionPane.showMessageDialog(this,
+            "Chức năng " + title + " sẽ được thực hiện tại đây",
+            title,
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static Object[][] createSampleAccountData() {
+        return new Object[][] {
+            {"NV001", "admin", "Quản lí", "Đang hoạt động"},
+            {"NV002", "user", "Nhân viên", "Đang hoạt động"}
+        };
+    }
+
+}

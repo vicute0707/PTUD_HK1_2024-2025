@@ -1,0 +1,76 @@
+package export;
+
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import javax.swing.*;
+import javax.swing.table.TableModel;
+import java.awt.Component;
+
+public class ExcelExporterNV {
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd-MM-yyyy_HH-mm-ss");
+
+    public static void exportToCSV(JTable table, String title, Component parentComponent) {
+        try {
+            // Create file chooser with default filename
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Chọn vị trí lưu file");
+            String defaultFileName = title.toLowerCase().replace(" ", "_") + "_" + 
+                                   DATE_FORMAT.format(new Date()) + ".csv";
+            fileChooser.setSelectedFile(new File(defaultFileName));
+
+            if (fileChooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                // Add .csv extension if not present
+                if (!file.getName().toLowerCase().endsWith(".csv")) {
+                    file = new File(file.getAbsolutePath() + ".csv");
+                }
+
+                // Write to CSV file
+                try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(
+                        new FileOutputStream(file), "UTF-8"))) {
+                    
+                    // Write title
+                    writer.println("Báo cáo " + title);
+                    writer.println("Ngày xuất: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date()));
+                    writer.println(); // Empty line for separation
+                    
+                    TableModel model = table.getModel();
+                    
+                    // Write header row
+                    StringBuilder header = new StringBuilder();
+                    for (int col = 0; col < model.getColumnCount(); col++) {
+                        if (col > 0) header.append(",");
+                        header.append("\"").append(model.getColumnName(col)).append("\"");
+                    }
+                    writer.println(header.toString());
+
+                    // Write data rows
+                    for (int row = 0; row < model.getRowCount(); row++) {
+                        StringBuilder sb = new StringBuilder();
+                        for (int col = 0; col < model.getColumnCount(); col++) {
+                            if (col > 0) sb.append(",");
+                            Object value = model.getValueAt(row, col);
+                            sb.append("\"").append(value != null ? value.toString() : "").append("\"");
+                        }
+                        writer.println(sb.toString());
+                    }
+
+                    JOptionPane.showMessageDialog(
+                        parentComponent,
+                        "Xuất file CSV thành công!\nVị trí: " + file.getAbsolutePath(),
+                        "Thành công",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(
+                parentComponent,
+                "Lỗi khi xuất file: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+}

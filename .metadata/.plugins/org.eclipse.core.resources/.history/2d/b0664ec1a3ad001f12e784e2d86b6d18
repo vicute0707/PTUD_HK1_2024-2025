@@ -1,0 +1,135 @@
+package service;
+
+import entity.UserRole;
+import bus.UserRoleBUS;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Manages permission checking and validation for the store management system.
+ * Includes native JSON array handling without external dependencies.
+ */
+public class PermissionChecker {
+	// Permission constants mapped to database values
+	public static final String PERM_USER_MANAGEMENT = "PERM001"; // Quản lý người dùng
+	public static final String PERM_PRODUCT_MANAGEMENT = "PERM002"; // Quản lý sản phẩm
+	public static final String PERM_ORDER_MANAGEMENT = "PERM003"; // Quản lý đơn hàng
+	public static final String PERM_INVENTORY = "PERM004"; // Quản lý kho
+	public static final String PERM_IMPORT = "PERM005"; // Quản lý nhập hàng
+	public static final String PERM_REPORT = "PERM006"; // Quản lý báo cáo
+
+	public static final Map<String, String> PERMISSION_DISPLAY_NAMES = new HashMap<String, String>() {
+		{
+			put(PERM_USER_MANAGEMENT, "Quản lý người dùng");
+			put(PERM_PRODUCT_MANAGEMENT, "Quản lý sản phẩm");
+			put(PERM_ORDER_MANAGEMENT, "Quản lý đơn hàng");
+			put(PERM_INVENTORY, "Quản lý kho");
+			put(PERM_IMPORT, "Quản lý nhập hàng");
+			put(PERM_REPORT, "Quản lý báo cáo");
+		}
+	};
+
+	private static final UserRoleBUS userRoleBUS = new UserRoleBUS();
+
+	/**
+	 * Parses a JSON array string into a List of permission IDs. Example input:
+	 * ["PERM001","PERM002"]
+	 */
+	private static List<String> parsePermissions(String jsonPermissions) {
+		List<String> permissions = new ArrayList<>();
+
+		if (jsonPermissions == null || jsonPermissions.isEmpty() || !jsonPermissions.startsWith("[")
+				|| !jsonPermissions.endsWith("]")) {
+			return permissions;
+		}
+
+		// Remove brackets and split by comma
+		String content = jsonPermissions.substring(1, jsonPermissions.length() - 1);
+		if (content.trim().isEmpty()) {
+			return permissions;
+		}
+
+		// Split and clean each permission ID
+		for (String permission : content.split(",")) {
+			String cleaned = permission.trim().replace("\"", "").replace("'", "");
+			if (!cleaned.isEmpty()) {
+				permissions.add(cleaned);
+			}
+		}
+
+		return permissions;
+	}
+
+	/**
+	 * Converts a List of permission IDs into a JSON array string. Example output:
+	 * ["PERM001","PERM002"]
+	 */
+	private static String formatPermissionsToJson(List<String> permissions) {
+		if (permissions == null || permissions.isEmpty()) {
+			return "[]";
+		}
+
+		return permissions.stream().map(perm -> "\"" + perm + "\"").collect(Collectors.joining(",", "[", "]"));
+	}
+
+	/**
+	 * Checks if a user has a specific permission.
+	 */
+	public static boolean hasPermission(String userId, String permissionId) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null)
+				return false;
+
+			List<String> permissions = parsePermissions(userRole.getPermissions());
+			return permissions.contains(permissionId);
+		} catch (Exception e) {
+			System.err.println("Error checking permission: " + e.getMessage());
+			return false;
+		}
+	}
+
+	/**
+	 * Updates permissions for a role with proper JSON formatting.
+	 */
+	public static void updateRolePermissions(String roleId, List<String> newPermissions) {
+		try {
+			// Validate permissions
+			List<String> validPermissions = newPermissions.stream().filter(PERMISSION_DISPLAY_NAMES::containsKey)
+					.collect(Collectors.toList());
+
+			// Convert to JSON format and update
+			String jsonPermissions = formatPermissionsToJson(validPermissions);
+			userRoleBUS.updatePermissions(roleId, jsonPermissions);
+		} catch (Exception e) {
+			System.err.println("Error updating role permissions: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Converts comma-separated display names to a list of permission IDs
+	 */
+	public static List<String> convertDisplayNamesToPermissionIds(String displayNames) {
+		if (displayNames == null || displayNames.trim().isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		return Arrays.stream(displayNames.split(",")).map(String::trim)
+				.map(displayName -> PERMISSION_DISPLAY_NAMES.entrySet().stream()
+						.filter(entry -> entry.getValue().equals(displayName)).map(Map.Entry::getKey).findFirst()
+						.orElse(null))
+				.filter(Objects::nonNull).collect(Collectors.toList());
+	}
+
+	/**
+	 * Gets all permissions with their display names for UI display
+	 */
+	public static List<Map<String, String>> getAllPermissions() {
+		return PERMISSION_DISPLAY_NAMES.entrySet().stream().map(entry -> {
+			Map<String, String> permission = new HashMap<>();
+			permission.put("id", entry.getKey());
+			permission.put("name", entry.getValue());
+			return permission;
+		}).collect(Collectors.toList());
+	}
+}

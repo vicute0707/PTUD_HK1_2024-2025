@@ -1,0 +1,94 @@
+package component;
+
+import bus.UserRoleBUS;
+import dialog.UserRoleDialog;
+import entity.UserRole;
+import javax.swing.*;
+import java.util.List;
+
+public class UserRoleManagementPanel extends BaseManagementPanel {
+	private final UserRoleBUS userRoleBUS;
+
+	public UserRoleManagementPanel() {
+		super("Quản lý vai trò", new String[] { "Mã vai trò", "Tên vai trò", "Quyền hạn" }, loadRoleData());
+		userRoleBUS = new UserRoleBUS();
+	}
+
+	private static Object[][] loadRoleData() {
+		UserRoleBUS bus = new UserRoleBUS();
+		List<UserRole> roles = bus.getAllRoles();
+		Object[][] data = new Object[roles.size()][3];
+
+		for (int i = 0; i < roles.size(); i++) {
+			UserRole role = roles.get(i);
+			data[i] = new Object[] { role.getRoleID(), role.getRoleName(), role.getPermissions().toString() };
+		}
+		return data;
+	}
+
+	@Override
+	protected void handleAdd() {
+		UserRole role = new UserRole();
+		UserRoleDialog dialog = new UserRoleDialog((JFrame) SwingUtilities.getWindowAncestor(this), "Thêm vai trò",
+				role, true);
+
+		dialog.setVisible(true);
+
+		if (dialog.isConfirmed()) {
+			try {
+				if (userRoleBUS.addRole(role)) {
+					refreshTable();
+					JOptionPane.showMessageDialog(this, "Thêm vai trò thành công!");
+				}
+			} catch (Exception e) {
+				JOptionPane.showMessageDialog(this, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	@Override
+	protected void handleAbout() {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow < 0) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn một vai trò để xem chi tiết");
+			return;
+		}
+
+		String roleId = table.getValueAt(selectedRow, 0).toString();
+		UserRole role = userRoleBUS.getRoleById(roleId);
+
+		if (role != null) {
+			UserRoleDialog dialog = new UserRoleDialog((JFrame) SwingUtilities.getWindowAncestor(this),
+					"Chi tiết vai trò", role, false);
+			dialog.setVisible(true);
+		}
+	}
+
+	private void refreshTable() {
+		tableModel.setRowCount(0);
+		List<UserRole> roles = userRoleBUS.getAllRoles();
+		for (UserRole role : roles) {
+			tableModel.addRow(new Object[] { role.getRoleID(), role.getRoleName(), role.getPermissions().toString() });
+		}
+	}
+	private static Object[][] loadRoleData() {
+	    UserRoleBUS bus = new UserRoleBUS();
+	    List<UserRole> roles = bus.getAllRoles();
+	    Object[][] data = new Object[roles.size()][3];
+	    
+	    for (int i = 0; i < roles.size(); i++) {
+	        UserRole role = roles.get(i);
+	        String permissions = role.getPermissions()
+	            .replace("[", "")
+	            .replace("]", "")
+	            .replace("\"", "");
+	            
+	        data[i] = new Object[]{
+	            role.getRoleID(),
+	            role.getRoleName(),
+	            permissions  // This will show the raw permission IDs from database
+	        };
+	    }
+	    return data;
+	}
+}

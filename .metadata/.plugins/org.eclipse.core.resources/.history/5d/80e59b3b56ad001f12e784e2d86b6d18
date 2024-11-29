@@ -1,0 +1,117 @@
+package export;
+
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.*;
+import javax.swing.*;
+import javax.swing.table.TableModel;
+
+import java.awt.Component;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class ExcelExporterNV {
+	 private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd-MM-yyyy_HH-mm-ss");
+
+	    public static void exportToExcel(JTable table, String title, Component parentComponent) {
+	        try {
+	            // Create a new workbook using the older HSSF format (compatible with Excel 97-2003)
+	            HSSFWorkbook workbook = new HSSFWorkbook();
+	            HSSFSheet sheet = workbook.createSheet(title);
+
+	            // Create styles for our workbook
+	            HSSFCellStyle headerStyle = workbook.createCellStyle();
+	            headerStyle.setFillForegroundColor(HSSFColor.PINK.index);
+	            headerStyle.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
+	            headerStyle.setAlignment(HSSFCellStyle.ALIGN_CENTER);
+
+	            HSSFFont headerFont = workbook.createFont();
+	            headerFont.setBoldweight(HSSFFont.BOLDWEIGHT_BOLD);
+	            headerFont.setColor(HSSFColor.WHITE.index);
+	            headerStyle.setFont(headerFont);
+
+	            // Create title row with the report name
+	            Row titleRow = sheet.createRow(0);
+	            Cell titleCell = titleRow.createCell(0);
+	            titleCell.setCellValue("Báo cáo " + title);
+	            titleCell.setCellStyle(headerStyle);
+	            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, table.getColumnCount() - 1));
+
+	            // Add date information
+	            Row dateRow = sheet.createRow(1);
+	            Cell dateCell = dateRow.createCell(0);
+	            dateCell.setCellValue("Ngày xuất: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date()));
+	            sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, table.getColumnCount() - 1));
+
+	            // Create the header row for our table
+	            Row headerRow = sheet.createRow(2);
+	            TableModel model = table.getModel();
+
+	            // Add column headers
+	            for (int col = 0; col < model.getColumnCount(); col++) {
+	                Cell cell = headerRow.createCell(col);
+	                cell.setCellValue(model.getColumnName(col));
+	                cell.setCellStyle(headerStyle);
+	            }
+
+	            // Add the data rows
+	            for (int row = 0; row < model.getRowCount(); row++) {
+	                Row dataRow = sheet.createRow(row + 3);
+	                for (int col = 0; col < model.getColumnCount(); col++) {
+	                    Cell cell = dataRow.createCell(col);
+	                    Object value = model.getValueAt(row, col);
+	                    cell.setCellValue(value != null ? value.toString() : "");
+	                }
+	            }
+
+	            // Adjust column widths to fit content
+	            for (int col = 0; col < model.getColumnCount(); col++) {
+	                sheet.autoSizeColumn(col);
+	            }
+
+	            // Create file chooser for saving the file
+	            JFileChooser fileChooser = new JFileChooser();
+	            fileChooser.setDialogTitle("Chọn vị trí lưu file");
+	            
+	            // Create default filename with current date and time
+	            String defaultFileName = title.toLowerCase().replace(" ", "_") + "_" + 
+	                                   DATE_FORMAT.format(new Date()) + ".xls";
+	            fileChooser.setSelectedFile(new File(defaultFileName));
+
+	            // Show save dialog
+	            if (fileChooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+	                File file = fileChooser.getSelectedFile();
+	                // Add .xls extension if not present
+	                if (!file.getName().toLowerCase().endsWith(".xls")) {
+	                    file = new File(file.getAbsolutePath() + ".xls");
+	                }
+
+	                // Save the workbook
+	                try (FileOutputStream out = new FileOutputStream(file)) {
+	                    workbook.write(out);
+	                }
+
+	                JOptionPane.showMessageDialog(
+	                    parentComponent,
+	                    "Xuất file Excel thành công!\nVị trí: " + file.getAbsolutePath(),
+	                    "Thành công",
+	                    JOptionPane.INFORMATION_MESSAGE
+	                );
+	            }
+
+	            // Clean up resources
+	            workbook.close();
+
+	        } catch (Exception e) {
+	            JOptionPane.showMessageDialog(
+	                parentComponent,
+	                "Lỗi khi xuất file Excel: " + e.getMessage(),
+	                "Lỗi",
+	                JOptionPane.ERROR_MESSAGE
+	            );
+	        }
+	    }
+}

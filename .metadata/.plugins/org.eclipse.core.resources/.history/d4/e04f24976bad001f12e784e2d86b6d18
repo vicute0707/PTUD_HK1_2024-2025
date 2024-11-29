@@ -1,0 +1,152 @@
+package service;
+
+import entity.UserRole;
+
+
+import bus.UserRoleBUS;
+
+import java.util.Arrays;
+import java.util.List;
+
+public class PermissionChecker {
+	// Define permission module constants
+	public static final String NGUOIDUNG = "Quản lý người dùng";
+	public static final String SANPHAM = "Quản lý sản phẩm";
+	public static final String KHO = "Quản lý kho";
+	public static final String BANHANG = "Quản lý bán hàng";
+	public static final String NHAPHANG = "Quản lý nhập hàng";
+	public static final String BAOCAO = "Quản lý báo cáo";
+	public static final String PHANQUYEN = "Quản lý phân quyền";
+
+	private static UserRoleBUS userRoleBUS = new UserRoleBUS();
+
+	/**
+	 * Kiểm tra quyền của người dùng với một module cụ thể
+	 */
+	public static boolean hasPermission(String userId, String moduleName) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null)
+				return false;
+
+			String permissionsJson = userRole.getPermissions();
+			if (permissionsJson == null || permissionsJson.isEmpty())
+				return false;
+
+			JSONArray permissions = new JSONArray(permissionsJson);
+
+			// Duyệt qua danh sách quyền
+			for (int i = 0; i < permissions.length(); i++) {
+				String permission = permissions.getString(i);
+				// Kiểm tra xem quyền có chứa tên module không
+				if (permission.equals(moduleName)) {
+					return true;
+				}
+			}
+			return false;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Kiểm tra nhiều quyền cùng lúc
+	 */
+	public static boolean hasMultiplePermissions(String userId, String... moduleNames) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null)
+				return false;
+
+			List<String> requiredPermissions = Arrays.asList(moduleNames);
+			JSONArray userPermissions = new JSONArray(userRole.getPermissions());
+
+			// Kiểm tra từng quyền yêu cầu
+			for (String required : requiredPermissions) {
+				boolean hasPermission = false;
+				for (int i = 0; i < userPermissions.length(); i++) {
+					if (userPermissions.getString(i).equals(required)) {
+						hasPermission = true;
+						break;
+					}
+				}
+				if (!hasPermission)
+					return false;
+			}
+			return true;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Lấy danh sách quyền của người dùng
+	 */
+	public static List<String> getUserPermissions(String userId) {
+		try {
+			UserRole userRole = userRoleBUS.getRoleById(userId);
+			if (userRole == null || userRole.getPermissions() == null) {
+				return Arrays.asList();
+			}
+
+			JSONArray permissionsArray = new JSONArray(userRole.getPermissions());
+			List<String> permissions = Arrays.asList();
+			for (int i = 0; i < permissionsArray.length(); i++) {
+				permissions.add(permissionsArray.getString(i));
+			}
+			return permissions;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return Arrays.asList();
+		}
+	}
+
+	/**
+	 * Kiểm tra và áp dụng quyền cho button dựa trên chức năng
+	 */
+	public static boolean shouldEnableButton(String userId, String buttonFunction) {
+		switch (buttonFunction.toLowerCase()) {
+		case "thêm người dùng":
+		case "sửa người dùng":
+		case "xóa người dùng":
+			return hasPermission(userId, NGUOIDUNG);
+
+		case "thêm sản phẩm":
+		case "sửa sản phẩm":
+		case "xóa sản phẩm":
+			return hasPermission(userId, SANPHAM);
+
+		case "nhập hàng":
+		case "xuất hàng":
+			return hasPermission(userId, KHO);
+
+		case "bán hàng":
+		case "đơn hàng":
+			return hasPermission(userId, BANHANG);
+
+		case "nhập kho":
+		case "phiếu nhập":
+			return hasPermission(userId, NHAPHANG);
+
+		case "báo cáo":
+		case "thống kê":
+			return hasPermission(userId, BAOCAO);
+
+		case "phân quyền":
+		case "quản lý quyền":
+			return hasPermission(userId, PHANQUYEN);
+
+		default:
+			return false;
+		}
+	}
+
+	/**
+	 * Lấy thông báo khi không có quyền truy cập
+	 */
+	public static String getPermissionDeniedMessage(String moduleName) {
+		return "Bạn không có quyền truy cập vào chức năng " + moduleName;
+	}
+}

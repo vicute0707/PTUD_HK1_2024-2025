@@ -1,0 +1,222 @@
+package dialog;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import entity.User;
+import com.toedter.calendar.JDateChooser;
+
+public class SuaNhanVienDialog extends JDialog {
+    private User user;
+    private boolean isConfirmed = false;
+    
+    // UI Components
+    private JTextField txtMaNV;
+    private JTextField txtHoTen;
+    private JComboBox<String> cboGioiTinh;
+    private JDateChooser dateChooser;
+    private JTextField txtSDT;
+    private JTextField txtEmail;
+    private JTextArea txtDiaChi;
+    private JComboBox<String> cboTrangThai;
+    private JTextField txtUsername;
+    private JComboBox<String> cboRole;
+    
+    private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+    private static final Font LABEL_FONT = new Font("Arial", Font.BOLD, 12);
+    
+    public static User showDialog(Frame parent, User user) {
+        SuaNhanVienDialog dialog = new SuaNhanVienDialog(parent, user);
+        dialog.setVisible(true);
+        return dialog.isConfirmed ? dialog.getUser() : null;
+    }
+    
+    private SuaNhanVienDialog(Frame parent, User user) {
+        super(parent, "Sửa thông tin nhân viên", true);
+        this.user = new User(); // Create a copy of the user
+        
+        initComponents();
+        loadUserData();
+        
+        pack();
+        setLocationRelativeTo(parent);
+        setResizable(false);
+    }
+    
+    private void initComponents() {
+        // Main panel with padding
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Form panel
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        
+        // Initialize components
+        txtMaNV = new JTextField();
+        txtMaNV.setEditable(false);
+        txtHoTen = new JTextField();
+        cboGioiTinh = new JComboBox<>(new String[]{"Nam", "Nữ"});
+        dateChooser = new JDateChooser();
+        txtSDT = new JTextField();
+        txtEmail = new JTextField();
+        txtDiaChi = new JTextArea(3, 20);
+        txtDiaChi.setLineWrap(true);
+        txtDiaChi.setWrapStyleWord(true);
+        cboTrangThai = new JComboBox<>(new String[]{"Đang làm việc", "Đã nghỉ việc"});
+        txtUsername = new JTextField();
+        txtUsername.setEditable(false);
+        cboRole = new JComboBox<>(new String[]{"Admin", "User", "Manager"});
+        
+        // Add components to form
+        int row = 0;
+        
+        addFormField(formPanel, "Mã nhân viên:", txtMaNV, gbc, row++);
+        addFormField(formPanel, "Họ và tên:", txtHoTen, gbc, row++);
+        addFormField(formPanel, "Giới tính:", cboGioiTinh, gbc, row++);
+        addFormField(formPanel, "Ngày sinh:", dateChooser, gbc, row++);
+        addFormField(formPanel, "Số điện thoại:", txtSDT, gbc, row++);
+        addFormField(formPanel, "Email:", txtEmail, gbc, row++);
+        addFormField(formPanel, "Địa chỉ:", new JScrollPane(txtDiaChi), gbc, row++);
+        addFormField(formPanel, "Tên đăng nhập:", txtUsername, gbc, row++);
+        addFormField(formPanel, "Chức vụ:", cboRole, gbc, row++);
+        addFormField(formPanel, "Trạng thái:", cboTrangThai, gbc, row++);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnSave = new JButton("Lưu");
+        JButton btnCancel = new JButton("Hủy");
+        
+        styleButton(btnSave);
+        styleButton(btnCancel);
+        
+        btnSave.addActionListener(e -> saveChanges());
+        btnCancel.addActionListener(e -> dispose());
+        
+        buttonPanel.add(btnSave);
+        buttonPanel.add(btnCancel);
+        
+        // Add panels to main panel
+        mainPanel.add(formPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Add validation listeners
+        addValidationListeners();
+        
+        setContentPane(mainPanel);
+    }
+    
+    private void addFormField(JPanel panel, String label, JComponent component, 
+                            GridBagConstraints gbc, int row) {
+        gbc.gridy = row;
+        
+        // Label
+        gbc.gridx = 0;
+        gbc.weightx = 0.2;
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(LABEL_FONT);
+        panel.add(lbl, gbc);
+        
+        // Component
+        gbc.gridx = 1;
+        gbc.weightx = 0.8;
+        panel.add(component, gbc);
+    }
+    
+    private void styleButton(JButton button) {
+        button.setBackground(PRIMARY_COLOR);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setFont(new Font("Arial", Font.BOLD, 12));
+        button.setPreferredSize(new Dimension(100, 30));
+        
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(button.getBackground().darker());
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(PRIMARY_COLOR);
+            }
+        });
+    }
+    
+    private void loadUserData() {
+        txtMaNV.setText(user.getUserID());
+        txtHoTen.setText(user.getFullName());
+        cboGioiTinh.setSelectedItem(user.getGender());
+        dateChooser.setDate(user.getBirthDate());
+        txtSDT.setText(user.getPhone());
+        txtEmail.setText(user.getEmail());
+        txtDiaChi.setText(user.getAddress());
+        txtUsername.setText(user.getUsername());
+        cboRole.setSelectedItem(user.getRole());
+        cboTrangThai.setSelectedItem(user.getStatus());
+    }
+    
+    private void addValidationListeners() {
+        // Phone number validation
+        txtSDT.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                char c = e.getKeyChar();
+                if (!Character.isDigit(c) || txtSDT.getText().length() >= 10) {
+                    e.consume();
+                }
+            }
+        });
+        
+        // Email validation
+        txtEmail.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                String email = txtEmail.getText().trim();
+                if (!email.isEmpty() && !email.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+                    JOptionPane.showMessageDialog(SuaNhanVienDialog.this,
+                        "Email không hợp lệ", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    txtEmail.requestFocus();
+                }
+            }
+        });
+    }
+    
+    private void saveChanges() {
+        // Validate required fields
+        if (txtHoTen.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Vui lòng nhập họ tên", 
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        if (dateChooser.getDate() == null) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn ngày sinh", 
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // Update user object
+        user.setFullName(txtHoTen.getText().trim());
+        user.setGender(cboGioiTinh.getSelectedItem().toString());
+        user.setBirthDate(dateChooser.getDate());
+        user.setPhone(txtSDT.getText().trim());
+        user.setEmail(txtEmail.getText().trim());
+        user.setAddress(txtDiaChi.getText().trim());
+        user.setRole(cboRole.getSelectedItem().toString());
+        user.setStatus(cboTrangThai.getSelectedItem().toString());
+        
+        isConfirmed = true;
+        dispose();
+    }
+    
+    private User getUser() {
+        return user;
+    }
+}

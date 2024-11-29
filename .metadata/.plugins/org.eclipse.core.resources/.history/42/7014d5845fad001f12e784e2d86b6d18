@@ -1,0 +1,162 @@
+package bus;
+
+import java.util.List;
+import dao.SanPhamDAO;
+import entity.SanPham;
+import entity.DanhMuc;
+
+public class SanPhamBUS {
+    private SanPhamDAO sanPhamDAO;
+    private static final double MIN_PRICE = 1000.0; // Giá tối thiểu
+    private static final double MAX_MARKUP = 5.0; // Hệ số giá bán tối đa so với giá nhập
+
+    public SanPhamBUS() {
+        sanPhamDAO = new SanPhamDAO();
+    }
+
+    /**
+     * Lấy tất cả sản phẩm đang hoạt động
+     */
+    public List<SanPham> getAllSanPham() {
+        return sanPhamDAO.getAllSanPham();
+    }
+
+    /**
+     * Thêm sản phẩm mới với kiểm tra hợp lệ
+     */
+    public boolean addSanPham(SanPham sanPham) {
+        // Kiểm tra dữ liệu đầu vào
+        if (!validateSanPham(sanPham)) {
+            return false;
+        }
+
+        // Tự động cập nhật tình trạng dựa trên số lượng tồn
+        updateTinhTrang(sanPham);
+        
+        return sanPhamDAO.addSanPham(sanPham);
+    }
+
+    /**
+     * Cập nhật thông tin sản phẩm với kiểm tra hợp lệ
+     */
+    public boolean updateSanPham(SanPham sanPham) {
+        // Kiểm tra dữ liệu đầu vào
+        if (!validateSanPham(sanPham)) {
+            return false;
+        }
+
+        // Tự động cập nhật tình trạng dựa trên số lượng tồn
+        updateTinhTrang(sanPham);
+        
+        return sanPhamDAO.updateSanPham(sanPham);
+    }
+
+    /**
+     * Xóa sản phẩm (cập nhật trạng thái)
+     */
+    public boolean deleteSanPham(String maSP) {
+        // Kiểm tra xem sản phẩm có tồn tại không
+        SanPham sanPham = sanPhamDAO.getSanPhamById(maSP);
+        if (sanPham == null) {
+            return false;
+        }
+        
+        return sanPhamDAO.deleteSanPham(maSP);
+    }
+
+    /**
+     * Tìm kiếm sản phẩm với xử lý dữ liệu đầu vào
+     */
+    public List<SanPham> searchSanPham(String keyword, String searchType) {
+        // Chuẩn hóa từ khóa tìm kiếm
+        keyword = keyword.trim();
+        if (keyword.isEmpty()) {
+            return getAllSanPham();
+        }
+        
+        return sanPhamDAO.searchSanPham(keyword, searchType);
+    }
+
+    /**
+     * Lấy thông tin sản phẩm theo mã
+     */
+    public SanPham getSanPhamById(String maSP) {
+        return sanPhamDAO.getSanPhamById(maSP);
+    }
+
+    /**
+     * Kiểm tra tính hợp lệ của dữ liệu sản phẩm
+     */
+    private boolean validateSanPham(SanPham sanPham) {
+        // Kiểm tra các trường bắt buộc
+        if (sanPham.getTenSP() == null || sanPham.getTenSP().trim().isEmpty()) {
+            return false;
+        }
+        
+        if (sanPham.getDanhmuc() == null) {
+            return false;
+        }
+
+        // Kiểm tra giá
+        if (sanPham.getGiaNhap() < MIN_PRICE || sanPham.getGiaBan() < MIN_PRICE) {
+            return false;
+        }
+
+        // Kiểm tra tỷ lệ giá bán so với giá nhập
+        if (sanPham.getGiaBan() / sanPham.getGiaNhap() > MAX_MARKUP) {
+            return false;
+        }
+
+        // Kiểm tra số lượng tồn không âm
+        if (sanPham.getSoLuongTon() < 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Cập nhật tình trạng sản phẩm dựa trên số lượng tồn
+     */
+    private void updateTinhTrang(SanPham sanPham) {
+        int soLuongTon = sanPham.getSoLuongTon();
+        
+        if (soLuongTon <= 0) {
+            sanPham.setTinhTrang("Hết hàng");
+        } else if (soLuongTon <= 10) {
+            sanPham.setTinhTrang("Sắp hết");
+        } else {
+            sanPham.setTinhTrang("Còn hàng");
+        }
+    }
+
+    /**
+     * Kiểm tra số lượng tồn kho có đủ để bán không
+     */
+    public boolean kiemTraSoLuong(String maSP, int soLuongMua) {
+        SanPham sanPham = getSanPhamById(maSP);
+        return sanPham != null && sanPham.getSoLuongTon() >= soLuongMua;
+    }
+
+    /**
+     * Tự động tạo mã sản phẩm mới
+     */
+    public String generateMaSP() {
+        List<SanPham> danhSachSP = getAllSanPham();
+        int maxNumber = 0;
+        
+        for (SanPham sp : danhSachSP) {
+            String maSP = sp.getMaSP();
+            if (maSP.startsWith("PRD")) {
+                try {
+                    int number = Integer.parseInt(maSP.substring(3));
+                    maxNumber = Math.max(maxNumber, number);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+            }
+        }
+        
+        return String.format("PRD%03d", maxNumber + 1);
+    }
+}

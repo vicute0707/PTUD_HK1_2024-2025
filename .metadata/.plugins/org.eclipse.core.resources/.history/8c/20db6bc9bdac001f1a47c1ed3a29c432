@@ -1,0 +1,51 @@
+package component;
+
+import javax.swing.*;
+
+import style.UIConstants;
+
+import java.awt.*;
+import java.awt.event.ActionListener;
+
+
+public class SearchPanel extends JPanel {
+	private JTextField searchField;
+
+	public SearchPanel(ActionListener searchListener) {
+		setLayout(new FlowLayout(FlowLayout.LEFT));
+		setBackground(Color.WHITE);
+
+		searchField = new JTextField(20);
+		JButton searchButton = new JButton("Tìm kiếm");
+		searchButton.addActionListener(searchListener);
+
+		add(new JLabel("Tìm kiếm:"));
+		add(searchField);
+		add(searchButton);
+	}
+
+	public String getSearchText() {
+		return searchField.getText();
+	}
+}
+
+public class ButtonPanel extends JPanel {
+	public ButtonPanel(ActionListener addListener, ActionListener editListener, ActionListener deleteListener,
+			ActionListener exportListener, ActionListener aboutListener) {
+		setLayout(new FlowLayout(FlowLayout.LEFT));
+		setBackground(Color.WHITE);
+
+		addButton("Thêm", addListener);
+		addButton("Sửa", editListener);
+		addButton("Xóa", deleteListener);
+		addButton("Xuất Excel", exportListener);
+		addButton("About", aboutListener);
+	}
+
+	private void addButton(String text, ActionListener listener) {
+		JButton button = new JButton(text);
+		button.setFont(UIConstants.CONTENT_FONT);
+		button.addActionListener(listener);
+		add(button);
+	}
+}

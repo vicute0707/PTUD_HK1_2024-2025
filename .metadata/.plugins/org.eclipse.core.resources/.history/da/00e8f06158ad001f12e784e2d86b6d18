@@ -1,0 +1,131 @@
+package export;
+
+import org.apache.poi.hssf.usermodel.*;
+import org.apache.poi.hssf.util.HSSFColor;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+
+import javax.swing.*;
+import javax.swing.table.TableModel;
+import java.awt.Component;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class ExcelExporterNV {
+    // Định dạng ngày giờ cho tên file
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd-MM-yyyy_HH-mm-ss");
+
+    public static void exportToExcel(JTable table, String title, Component parentComponent) {
+        try {
+            // Tạo workbook mới sử dụng định dạng .xls (phiên bản cũ nhưng ổn định hơn)
+            HSSFWorkbook workbook = new HSSFWorkbook();
+            
+            // Tạo sheet mới với tên là "Báo cáo"
+            HSSFSheet sheet = workbook.createSheet("Báo cáo");
+            
+            // Thiết lập style cho tiêu đề
+            HSSFCellStyle titleStyle = workbook.createCellStyle();
+            HSSFFont titleFont = workbook.createFont();
+            titleFont.setBoldweight(HSSFFont.BOLDWEIGHT_BOLD);
+            titleFont.setFontHeightInPoints((short) 16);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(HSSFCellStyle.ALIGN_CENTER);
+            
+            // Thiết lập style cho header
+            HSSFCellStyle headerStyle = workbook.createCellStyle();
+            HSSFFont headerFont = workbook.createFont();
+            headerFont.setBoldweight(HSSFFont.BOLDWEIGHT_BOLD);
+            headerFont.setColor(HSSFColor.WHITE.index);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(HSSFColor.ROYAL_BLUE.index);
+            headerStyle.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
+            headerStyle.setAlignment(HSSFCellStyle.ALIGN_CENTER);
+            headerStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+            headerStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+            headerStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+            headerStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+            
+            // Tạo style cho dữ liệu
+            HSSFCellStyle dataStyle = workbook.createCellStyle();
+            dataStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+            dataStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+            dataStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+            dataStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+            
+            // Tạo tiêu đề báo cáo
+            int currentRow = 0;
+            Row titleRow = sheet.createRow(currentRow++);
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue("BÁO CÁO " + title.toUpperCase());
+            titleCell.setCellStyle(titleStyle);
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, table.getColumnCount() - 1));
+            
+            // Thêm ngày xuất báo cáo
+            Row dateRow = sheet.createRow(currentRow++);
+            Cell dateCell = dateRow.createCell(0);
+            dateCell.setCellValue("Ngày xuất: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date()));
+            sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, table.getColumnCount() - 1));
+            
+            // Tạo một dòng trống để phân cách
+            currentRow++;
+            
+            // Tạo header cho bảng
+            Row headerRow = sheet.createRow(currentRow++);
+            TableModel model = table.getModel();
+            
+            for (int col = 0; col < model.getColumnCount(); col++) {
+                Cell cell = headerRow.createCell(col);
+                cell.setCellValue(model.getColumnName(col));
+                cell.setCellStyle(headerStyle);
+                sheet.autoSizeColumn(col);
+            }
+            
+            // Thêm dữ liệu từ bảng
+            for (int row = 0; row < model.getRowCount(); row++) {
+                Row dataRow = sheet.createRow(currentRow++);
+                for (int col = 0; col < model.getColumnCount(); col++) {
+                    Cell cell = dataRow.createCell(col);
+                    Object value = model.getValueAt(row, col);
+                    cell.setCellValue(value != null ? value.toString() : "");
+                    cell.setCellStyle(dataStyle);
+                }
+            }
+            
+            // Hiển thị hộp thoại chọn nơi lưu file
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Chọn vị trí lưu file");
+            String defaultFileName = title.toLowerCase().replace(" ", "_") + "_" + 
+                                   DATE_FORMAT.format(new Date()) + ".xls";
+            fileChooser.setSelectedFile(new File(defaultFileName));
+            
+            if (fileChooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".xls")) {
+                    file = new File(file.getAbsolutePath() + ".xls");
+                }
+                
+                // Lưu file
+                FileOutputStream out = new FileOutputStream(file);
+                workbook.write(out);
+                out.close();
+                workbook.close();
+                
+                JOptionPane.showMessageDialog(
+                    parentComponent,
+                    "Xuất file Excel thành công!\nVị trí: " + file.getAbsolutePath(),
+                    "Thành công",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(
+                parentComponent,
+                "Lỗi khi xuất file Excel: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+}

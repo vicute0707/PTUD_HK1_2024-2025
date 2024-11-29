@@ -1,0 +1,105 @@
+package dialog;
+
+import entity.Permission;
+import java.awt.*;
+import javax.swing.*;
+
+public class PermissionDialog extends JDialog {
+	private JTextField txtId, txtName;
+	private JTextArea txtDescription;
+	private boolean confirmed = false;
+	private Permission permission;
+
+	public PermissionDialog(JFrame parent, String title, Permission permission, boolean isAdd) {
+		super(parent, title, true);
+		this.permission = permission;
+
+		JPanel panel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(5, 5, 5, 5);
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+
+		// ID Field
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		panel.add(new JLabel("Mã quyền:"), gbc);
+		gbc.gridx = 1;
+		txtId = new JTextField(20);
+		txtId.setEnabled(isAdd);
+		panel.add(txtId, gbc);
+
+		// Name Field
+		gbc.gridx = 0;
+		gbc.gridy = 1;
+		panel.add(new JLabel("Tên quyền:"), gbc);
+		gbc.gridx = 1;
+		txtName = new JTextField(20);
+		panel.add(txtName, gbc);
+
+		// Description Field
+		gbc.gridx = 0;
+		gbc.gridy = 2;
+		panel.add(new JLabel("Mô tả:"), gbc);
+		gbc.gridx = 1;
+		txtDescription = new JTextArea(3, 20);
+		txtDescription.setLineWrap(true);
+		panel.add(new JScrollPane(txtDescription), gbc);
+
+		// Buttons
+		JPanel buttonPanel = new JPanel();
+		JButton btnOK = new JButton("OK");
+		JButton btnCancel = new JButton("Hủy");
+
+		btnOK.addActionListener(e -> {
+			if (validateInput()) {
+				updatePermissionFromFields();
+				confirmed = true;
+				dispose();
+			}
+		});
+
+		btnCancel.addActionListener(e -> dispose());
+
+		buttonPanel.add(btnOK);
+		buttonPanel.add(btnCancel);
+
+		setLayout(new BorderLayout());
+		add(panel, BorderLayout.CENTER);
+		add(buttonPanel, BorderLayout.SOUTH);
+
+		if (permission != null) {
+			loadPermissionData();
+		}
+
+		pack();
+		setLocationRelativeTo(parent);
+	}
+
+	private void loadPermissionData() {
+		txtId.setText(permission.getPermissionID());
+		txtName.setText(permission.getName());
+		txtDescription.setText(permission.getDescription());
+	}
+
+	private boolean validateInput() {
+		if (txtId.getText().trim().isEmpty()) {
+			JOptionPane.showMessageDialog(this, "Mã quyền không được để trống");
+			return false;
+		}
+		if (txtName.getText().trim().isEmpty()) {
+			JOptionPane.showMessageDialog(this, "Tên quyền không được để trống");
+			return false;
+		}
+		return true;
+	}
+
+	private void updatePermissionFromFields() {
+		permission.setPermissionID(txtId.getText().trim());
+		permission.setName(txtName.getText().trim());
+		permission.setDescription(txtDescription.getText().trim());
+	}
+
+	public boolean isConfirmed() {
+		return confirmed;
+	}
+}

@@ -1,0 +1,169 @@
+package service;
+
+
+import entity.UserRole;
+import entity.Permission;
+
+import java.awt.Component;
+
+import javax.swing.JPanel;
+
+import bus.UserRoleBUS;
+
+public class PermissionChecker {
+    // Constants for different system modules
+    public static final String MODULE_USER = "NGUOIDUNG";
+    public static final String MODULE_PRODUCT = "SANPHAM"; 
+    public static final String MODULE_INVENTORY = "KHO";
+    public static final String MODULE_SALES = "BANHANG";
+    public static final String MODULE_PURCHASE = "NHAPHANG";
+    public static final String MODULE_REPORT = "BAOCAO";
+    public static final String MODULE_PERMISSION = "PHANQUYEN";
+
+    // Constants for different actions
+    public static final String ACTION_VIEW = "XEM";
+    public static final String ACTION_ADD = "THEM";
+    public static final String ACTION_EDIT = "SUA";
+    public static final String ACTION_DELETE = "XOA";
+    
+    private static UserRoleBUS userRoleBUS = new UserRoleBUS();
+
+    /**
+     * Kiểm tra quyền truy cập module cụ thể
+     * @param userId ID người dùng cần kiểm tra
+     * @param moduleCode Mã module (vd: SANPHAM, KHO...)
+     * @return true nếu người dùng có quyền truy cập module
+     */
+    public static boolean canAccessModule(String userId, String moduleCode) {
+        try {
+            UserRole userRole = userRoleBUS.getRoleById(userId);
+            if (userRole == null) return false;
+
+            // Lấy danh sách quyền từ vai trò
+            String permissions = userRole.getPermissions();
+            if (permissions == null || permissions.isEmpty()) return false;
+
+            // Parse chuỗi quyền thành mảng
+            String[] permissionList = permissions.replace("[", "")
+                                              .replace("]", "")
+                                              .replace("\"", "")
+                                              .split(",");
+
+            // Kiểm tra xem có quyền với module này không
+            for (String permission : permissionList) {
+                if (permission.trim().startsWith(moduleCode)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Kiểm tra quyền thực hiện hành động cụ thể trên module
+     * @param userId ID người dùng
+     * @param moduleCode Mã module
+     * @param actionCode Mã hành động (THEM, SUA, XOA...)
+     * @return true nếu có quyền thực hiện hành động
+     */
+    public static boolean hasPermission(String userId, String moduleCode, String actionCode) {
+        try {
+            UserRole userRole = userRoleBUS.getRoleById(userId);
+            if (userRole == null) return false;
+
+            String permissions = userRole.getPermissions();
+            if (permissions == null || permissions.isEmpty()) return false;
+
+            String[] permissionList = permissions.replace("[", "")
+                                              .replace("]", "")
+                                              .replace("\"", "")
+                                              .split(",");
+
+            // Tạo mã quyền cần kiểm tra (vd: SANPHAM_THEM)
+            String requiredPermission = moduleCode + "_" + actionCode;
+
+            for (String permission : permissionList) {
+                if (permission.trim().equals(requiredPermission)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Kiểm tra và cập nhật trạng thái các điều khiển trên form
+     * @param component Form cần kiểm tra
+     * @param userId ID người dùng
+     * @param moduleCode Mã module
+     */
+    public static void updateFormControls(JPanel form, String userId, String moduleCode) {
+        // Nếu không có quyền truy cập module, vô hiệu hóa toàn bộ form
+        if (!canAccessModule(userId, moduleCode)) {
+            form.setEnabled(false);
+            showAccessDeniedMessage(form, "truy cập " + getModuleName(moduleCode));
+            return;
+        }
+
+        // Tìm và cập nhật trạng thái các nút điều khiển
+        for (Component comp : form.getComponents()) {
+            if (comp instanceof JButton) {
+                JButton button = (JButton) comp;
+                String actionCode = getActionCodeFromButton(button);
+                if (actionCode != null) {
+                    boolean hasPermission = hasPermission(userId, moduleCode, actionCode);
+                    button.setEnabled(hasPermission);
+                    if (!hasPermission) {
+                        button.setToolTipText("Bạn không có quyền " + 
+                            getActionName(actionCode) + " trong module " + 
+                            getModuleName(moduleCode));
+                    }
+                }
+            }
+        }
+    }
+
+    private static String getActionCodeFromButton(JButton button) {
+        String buttonText = button.getText().toUpperCase();
+        if (buttonText.contains("THÊM")) return ACTION_ADD;
+        if (buttonText.contains("SỬA")) return ACTION_EDIT;
+        if (buttonText.contains("XÓA")) return ACTION_DELETE;
+        return null;
+    }
+
+    private static String getModuleName(String moduleCode) {
+        switch (moduleCode) {
+            case MODULE_USER: return "Quản lý người dùng";
+            case MODULE_PRODUCT: return "Quản lý sản phẩm";
+            case MODULE_INVENTORY: return "Quản lý kho";
+            case MODULE_SALES: return "Quản lý bán hàng";
+            case MODULE_PURCHASE: return "Quản lý nhập hàng";
+            case MODULE_REPORT: return "Quản lý báo cáo";
+            case MODULE_PERMISSION: return "Quản lý phân quyền";
+            default: return moduleCode;
+        }
+    }
+
+    private static String getActionName(String actionCode) {
+        switch (actionCode) {
+            case ACTION_VIEW: return "xem";
+            case ACTION_ADD: return "thêm";
+            case ACTION_EDIT: return "sửa";
+            case ACTION_DELETE: return "xóa";
+            default: return actionCode;
+        }
+    }
+
+    private static void showAccessDeniedMessage(Component component, String action) {
+        JOptionPane.showMessageDialog(component,
+            "Bạn không có quyền " + action + "!",
+            "Từ chối truy cập",
+            JOptionPane.WARNING_MESSAGE);
+    }
+}

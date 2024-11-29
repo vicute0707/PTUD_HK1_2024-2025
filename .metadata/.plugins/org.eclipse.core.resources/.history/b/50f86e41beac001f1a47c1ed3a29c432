@@ -1,0 +1,81 @@
+package component;
+
+import java.awt.Frame;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+
+import dialog.SuaNhanVienDialog;
+import dialog.ThemNhanVienDialog;
+import entity.User;
+
+
+public class EmployeeManagementTab extends AbstractManagementTab {
+    public EmployeeManagementTab() {
+        super("Quản lý nhân viên",
+            new String[]{"Mã NV", "Họ và tên", "Giới tính", "Ngày sinh", "SDT", "Email"},
+            createSampleEmployeeData());
+    }
+
+    @Override
+    protected void handleAdd() {
+        User newUser = ThemNhanVienDialog.showDialog((Frame) SwingUtilities.getWindowAncestor(this));
+        if (newUser != null) {
+            DefaultTableModel model = (DefaultTableModel) table.getModel();
+            model.addRow(new Object[]{
+                newUser.getUserID(),
+                newUser.getFullName(), 
+                newUser.getGender(),
+                new SimpleDateFormat("dd/MM/yyyy").format(newUser.getBirthDate()),
+                newUser.getPhone(),
+                newUser.getEmail()
+            });
+        }
+    }
+
+    @Override
+    protected void handleEdit() {
+        if (!isRowSelected()) {
+            JOptionPane.showMessageDialog(this,
+                "Vui lòng chọn nhân viên cần sửa",
+                "Thông báo",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int selectedRow = table.getSelectedRow();
+        User currentUser = new User();
+        currentUser.setUserID(table.getValueAt(selectedRow, 0).toString());
+        currentUser.setFullName(table.getValueAt(selectedRow, 1).toString());
+        currentUser.setGender(table.getValueAt(selectedRow, 2).toString());
+        try {
+            Date birthDate = new SimpleDateFormat("dd/MM/yyyy").parse(table.getValueAt(selectedRow, 3).toString());
+            currentUser.setBirthDate(birthDate);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        currentUser.setPhone(table.getValueAt(selectedRow, 4).toString());
+        currentUser.setEmail(table.getValueAt(selectedRow, 5).toString());
+
+        User updatedUser = SuaNhanVienDialog.showDialog(
+            SwingUtilities.getWindowAncestor(this), 
+            currentUser
+        );
+
+        if (updatedUser != null) {
+            table.setValueAt(updatedUser.getFullName(), selectedRow, 1);
+            table.setValueAt(updatedUser.getGender(), selectedRow, 2);
+            table.setValueAt(new SimpleDateFormat("dd/MM/yyyy").format(updatedUser.getBirthDate()), selectedRow, 3);
+            table.setValueAt(updatedUser.getPhone(), selectedRow, 4);
+            table.setValueAt(updatedUser.getEmail(), selectedRow, 5);
+        }
+    }
+    private static Object[][] createSampleEmployeeData() {
+        return new Object[][] {
+            {"NV001", "Nguyễn Văn A", "Nam", "1990-01-01", "0123456789", "nva@email.com"},
+            {"NV002", "Trần Thị B", "Nữ", "1992-02-02", "0987654321", "ttb@email.com"}
+        };
+    }
+}

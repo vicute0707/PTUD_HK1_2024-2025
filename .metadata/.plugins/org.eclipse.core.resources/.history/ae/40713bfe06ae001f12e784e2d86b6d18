@@ -1,0 +1,313 @@
+package gui;
+
+import java.awt.*;
+import java.awt.event.*;
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+
+import bus.DanhMucBUS;
+import entity.DanhMuc;
+import entity.UserSession;
+import service.PermissionChecker;
+import java.util.logging.Logger;
+
+public class Form_DanhMuc extends JPanel {
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+
+	private int selectedRow = -1;
+	private JTable table;
+	private DefaultTableModel tableModel;
+	private JTextField searchField;
+	private DanhMucBUS danhMucBUS;
+	private static final Logger LOGGER = Logger.getLogger(Form_DanhMuc.class.getName());
+
+	public Form_DanhMuc() {
+		danhMucBUS = new DanhMucBUS();
+		initComponents();
+		loadData();
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout(10, 0));
+		setBackground(Color.WHITE);
+		setBorder(new EmptyBorder(20, 20, 20, 20));
+
+		// Main panel
+		JPanel mainPanel = new JPanel(new BorderLayout(0, 20));
+		mainPanel.setBackground(Color.WHITE);
+
+		// Add components to main panel
+		mainPanel.add(createSearchPanel(), BorderLayout.NORTH);
+		mainPanel.add(createTablePanel(), BorderLayout.CENTER);
+
+		// Add main panel to form
+		add(mainPanel, BorderLayout.CENTER);
+	}
+
+	private JPanel createSearchPanel() {
+		JPanel searchPanel = new JPanel(new BorderLayout(10, 0));
+		searchPanel.setBackground(Color.WHITE);
+
+		// Search field
+		searchField = new JTextField();
+		searchField.setPreferredSize(new Dimension(250, 35));
+		searchField.setFont(CONTENT_FONT);
+		searchField.setBorder(BorderFactory.createCompoundBorder(new LineBorder(new Color(230, 230, 230), 1, true),
+				BorderFactory.createEmptyBorder(5, 10, 5, 10)));
+
+		// Search functionality
+		searchField.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyReleased(KeyEvent e) {
+				String text = searchField.getText().trim();
+				performSearch(text);
+			}
+		});
+
+		// Add placeholder text
+		searchField.addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				if (searchField.getText().equals("Tìm kiếm danh mục...")) {
+					searchField.setText("");
+					searchField.setForeground(Color.BLACK);
+				}
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (searchField.getText().isEmpty()) {
+					searchField.setText("Tìm kiếm danh mục...");
+					searchField.setForeground(Color.GRAY);
+				}
+			}
+		});
+		searchField.setText("Tìm kiếm danh mục...");
+		searchField.setForeground(Color.GRAY);
+
+		// Buttons panel
+		JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+		buttonsPanel.setBackground(Color.WHITE);
+
+		// Add Category Button
+		JButton addButton = createButton("Thêm", "/icon/add.png");
+		addButton.setBackground(PRIMARY_COLOR);
+		addButton.setForeground(Color.WHITE);
+
+		String userId = UserSession.getInstance().getCurrentUser().getUserID();
+		addButton.addActionListener(e -> showAddDialog());
+
+		// Refresh Button
+		JButton refreshButton = createButton("Làm mới", "/icon/refresh.png");
+		refreshButton.addActionListener(e -> refreshData());
+
+		buttonsPanel.add(addButton);
+		buttonsPanel.add(refreshButton);
+
+		// Add components to search panel
+		searchPanel.add(searchField, BorderLayout.WEST);
+		searchPanel.add(buttonsPanel, BorderLayout.EAST);
+
+		return searchPanel;
+	}
+
+	private JPanel createTablePanel() {
+		JPanel tablePanel = new JPanel(new BorderLayout());
+		tablePanel.setBackground(Color.WHITE);
+
+		// Create table model
+		String[] columns = { "Mã DM", "Tên danh mục", "Ghi chú" };
+		tableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		// Create and setup table
+		table = new JTable(tableModel);
+		setupTable();
+
+		// Add table to scroll pane
+		JScrollPane scrollPane = new JScrollPane(table);
+		scrollPane.setBorder(new LineBorder(new Color(230, 230, 230)));
+
+		// Context menu for edit/delete
+		addTableContextMenu();
+
+		tablePanel.add(scrollPane, BorderLayout.CENTER);
+		return tablePanel;
+	}
+
+	private void setupTable() {
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(35);
+		table.setShowVerticalLines(true);
+		table.setGridColor(new Color(230, 230, 230));
+		table.setSelectionBackground(HOVER_COLOR);
+
+		// Center align cell contents
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+		for (int i = 0; i < table.getColumnCount(); i++) {
+			table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+		}
+
+		// Setup column widths
+		table.getColumnModel().getColumn(0).setPreferredWidth(100);
+		table.getColumnModel().getColumn(1).setPreferredWidth(200);
+		table.getColumnModel().getColumn(2).setPreferredWidth(300);
+
+		// Setup header
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+
+		// Selection listener
+		table.getSelectionModel().addListSelectionListener(e -> {
+			if (!e.getValueIsAdjusting()) {
+				selectedRow = table.getSelectedRow();
+			}
+		});
+	}
+
+	private void addTableContextMenu() {
+		JPopupMenu contextMenu = new JPopupMenu();
+
+		JMenuItem editItem = new JMenuItem("Sửa");
+		editItem.addActionListener(e -> {
+			if (selectedRow >= 0) {
+				showEditDialog();
+			}
+		});
+
+		JMenuItem deleteItem = new JMenuItem("Xóa");
+		deleteItem.addActionListener(e -> {
+			if (selectedRow >= 0) {
+				showDeleteDialog();
+			}
+		});
+
+		contextMenu.add(editItem);
+		contextMenu.add(deleteItem);
+
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					int row = table.rowAtPoint(e.getPoint());
+					if (row >= 0) {
+						table.setRowSelectionInterval(row, row);
+						selectedRow = row;
+						contextMenu.show(e.getComponent(), e.getX(), e.getY());
+					}
+				}
+			}
+		});
+	}
+
+	private void loadData() {
+		tableModel.setRowCount(0);
+		danhMucBUS.hienThiDanhMuc(tableModel);
+	}
+
+	private void refreshData() {
+		searchField.setText("");
+		selectedRow = -1;
+		danhMucBUS.refreshData();
+		loadData();
+	}
+
+	private void performSearch(String keyword) {
+		if (keyword.isEmpty() || keyword.equals("Tìm kiếm danh mục...")) {
+			loadData();
+			return;
+		}
+
+		tableModel.setRowCount(0);
+		danhMucBUS.timKiemDanhMuc(keyword)
+				.forEach(dm -> tableModel.addRow(new Object[] { dm.getMaDM(), dm.getTenDM(), dm.getGhiChu() }));
+	}
+
+	private JButton createButton(String text, String iconPath) {
+		JButton button = new JButton(text);
+		button.setFont(CONTENT_FONT);
+		if (iconPath != null && !iconPath.isEmpty()) {
+			try {
+				button.setIcon(new ImageIcon(getClass().getResource(iconPath)));
+			} catch (Exception e) {
+				LOGGER.warning("Không thể tải icon: " + iconPath);
+			}
+		}
+		button.setBorder(new LineBorder(new Color(230, 230, 230), 1, true));
+		button.setFocusPainted(false);
+		button.setPreferredSize(new Dimension(120, 35));
+		return button;
+	}
+
+	// Dialog methods
+	private void showAddDialog() {
+		// Implementation for add dialog
+		JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+		panel.add(new JLabel("Tên danh mục:"));
+		JTextField nameField = new JTextField();
+		panel.add(nameField);
+		panel.add(new JLabel("Ghi chú:"));
+		JTextField noteField = new JTextField();
+		panel.add(noteField);
+
+		int result = JOptionPane.showConfirmDialog(this, panel, "Thêm danh mục", JOptionPane.OK_CANCEL_OPTION);
+
+		if (result == JOptionPane.OK_OPTION) {
+			if (danhMucBUS.themDanhMuc(nameField.getText(), noteField.getText())) {
+				loadData();
+			}
+		}
+	}
+
+	private void showEditDialog() {
+		if (selectedRow < 0)
+			return;
+
+		String maDM = (String) tableModel.getValueAt(selectedRow, 0);
+		String tenDM = (String) tableModel.getValueAt(selectedRow, 1);
+		String ghiChu = (String) tableModel.getValueAt(selectedRow, 2);
+
+		JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+		panel.add(new JLabel("Tên danh mục:"));
+		JTextField nameField = new JTextField(tenDM);
+		panel.add(nameField);
+		panel.add(new JLabel("Ghi chú:"));
+		JTextField noteField = new JTextField(ghiChu);
+		panel.add(noteField);
+
+		int result = JOptionPane.showConfirmDialog(this, panel, "Sửa danh mục", JOptionPane.OK_CANCEL_OPTION);
+
+		if (result == JOptionPane.OK_OPTION) {
+			if (danhMucBUS.suaDanhMuc(maDM, nameField.getText(), noteField.getText())) {
+				loadData();
+			}
+		}
+	}
+
+	private void showDeleteDialog() {
+		if (selectedRow < 0)
+			return;
+
+		String maDM = (String) tableModel.getValueAt(selectedRow, 0);
+		int confirm = JOptionPane.showConfirmDialog(this, "Bạn có chắc muốn xóa danh mục này?", "Xác nhận xóa",
+				JOptionPane.YES_NO_OPTION);
+
+		if (confirm == JOptionPane.YES_OPTION) {
+			if (danhMucBUS.xoaDanhMuc(maDM)) {
+				loadData();
+			}
+		}
+	}
+}

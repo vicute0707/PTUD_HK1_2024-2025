@@ -1,0 +1,30 @@
+package component;
+
+import javax.swing.*;
+
+import style.UIConstants;
+
+import java.awt.*;
+import java.awt.event.ActionListener;
+
+
+public class SearchPanel extends JPanel {
+	private JTextField searchField;
+
+	public SearchPanel(ActionListener searchListener) {
+		setLayout(new FlowLayout(FlowLayout.LEFT));
+		setBackground(Color.WHITE);
+
+		searchField = new JTextField(20);
+		JButton searchButton = new JButton("Tìm kiếm");
+		searchButton.addActionListener(searchListener);
+
+		add(new JLabel("Tìm kiếm:"));
+		add(searchField);
+		add(searchButton);
+	}
+
+	public String getSearchText() {
+		return searchField.getText();
+	}
+}

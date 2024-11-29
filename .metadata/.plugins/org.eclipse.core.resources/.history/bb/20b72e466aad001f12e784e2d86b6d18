@@ -1,0 +1,61 @@
+package service;
+
+import entity.UserSession;
+import javax.swing.*;
+
+public class PermissionUtils {
+    /**
+     * Kiểm tra và áp dụng quyền cho các nút chức năng
+     * @param button Nút cần kiểm tra
+     * @param moduleCode Mã module
+     * @param actionCode Mã hành động
+     * @return Button đã được cấu hình quyền
+     */
+    public static JButton checkPermissionForButton(JButton button, String moduleCode, String actionCode) {
+        String userId = UserSession.getInstance().getCurrentUser();
+        
+        // Kiểm tra quyền truy cập module
+        if (!PermissionChecker.canAccessModule(userId, moduleCode)) {
+            button.setEnabled(false);
+            button.setToolTipText("Bạn không có quyền truy cập phân hệ này");
+            return button;
+        }
+        
+        // Kiểm tra quyền thực hiện hành động
+        if (!PermissionChecker.hasPermission(userId, moduleCode, actionCode)) {
+            button.setEnabled(false);
+            String actionName = getActionName(actionCode);
+            String moduleName = getModuleName(moduleCode);
+            button.setToolTipText("Bạn không có quyền " + actionName + " trong phân hệ " + moduleName);
+        }
+        
+        return button;
+    }
+    
+    /**
+     * Lấy tên hành động hiển thị cho người dùng
+     */
+    private static String getActionName(String actionCode) {
+        return switch (actionCode) {
+            case PermissionChecker.ACTION_VIEW -> "xem";
+            case PermissionChecker.ACTION_ADD -> "thêm mới";
+            case PermissionChecker.ACTION_EDIT -> "sửa";
+            case PermissionChecker.ACTION_DELETE -> "xóa";
+            default -> actionCode.toLowerCase();
+        };
+    }
+    
+    /**
+     * Lấy tên module hiển thị cho người dùng
+     */
+    private static String getModuleName(String moduleCode) {
+        return switch (moduleCode) {
+            case PermissionChecker.MODULE_SALES -> "bán hàng";
+            case PermissionChecker.MODULE_PURCHASE -> "nhập hàng"; 
+            case PermissionChecker.MODULE_REPORT -> "báo cáo";
+            case PermissionChecker.MODULE_INVENTORY -> "kho hàng";
+            case PermissionChecker.MODULE_PRODUCT -> "sản phẩm";
+            default -> moduleCode.toLowerCase();
+        };
+    }
+}

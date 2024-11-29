@@ -1,0 +1,37 @@
+package component;
+
+import javax.swing.*;
+import javax.swing.table.*;
+import java.awt.*;
+
+public class PermissionManagementPanel extends BaseManagementPanel {
+    public PermissionManagementPanel() {
+        super("Phân quyền",
+              new String[]{"Mã quyền", "Tên quyền truy cập","Hành động"},
+              createSampleData());
+    }
+
+    private static Object[][] createSampleData() {
+        return new Object[][] {
+            {"Q001", "Quản lí cửa hàng"},
+            {"Q002", "Quản lí nhân viên"},
+            {"Q003", "Quản lí kho"},
+            {"Q004", "Quản lí bán hàng"},
+            {"Q005", "Quản lí báo cáo"}
+        };
+    }
+
+    @Override
+    protected void handleAdd() {
+        JOptionPane.showMessageDialog(this, 
+            "Chức năng thêm quyền sẽ được thực hiện tại đây",
+            "Thêm quyền",
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+	@Override
+	protected void handleAbout() {
+		// TODO Auto-generated method stub
+		
+	}
+}

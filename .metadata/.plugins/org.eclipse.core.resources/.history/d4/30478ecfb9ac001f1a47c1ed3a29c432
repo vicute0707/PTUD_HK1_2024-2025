@@ -1,0 +1,920 @@
+package gui;
+
+import java.awt.*;
+import java.awt.event.*;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.List;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.plaf.basic.*;
+import javax.swing.table.*;
+
+import bus.PermissionBUS;
+import bus.UserBUS;
+import component.CreateTabPanel;
+import dialog.ThemNhanVienDialog;
+import dialog.SuaNhanVienDialog;
+import entity.Permission;
+import entity.User;
+import export.ExcelExporterNV;
+import style.CustomScrollBarUI;
+import style.StyleButton;
+import style.StyleTabbedPane;
+
+public class Form_NhanVien extends JPanel {
+	private static final Color CONTENT_COLOR = new Color(255, 192, 203);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font("Arial", Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font("Arial", Font.PLAIN, 12);
+	private static final Font TAB_FONT = new Font("Arial", Font.BOLD, 14);
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+
+	private JTabbedPane tabbedPane;
+	private JTable nhanVienTable;
+	private JTable quyenTable;
+	private JTable taiKhoanTable;
+	private DefaultTableModel nhanVienModel;
+	private DefaultTableModel quyenModel;
+	private DefaultTableModel taiKhoanModel;
+	private JTextField txtTimKiem;
+	private UserBUS userBUS;
+	private PermissionBUS permissionBUS;
+	private SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+	private JComboBox<String> filterComboBox;
+
+	public Form_NhanVien() {
+		try {
+			userBUS = new UserBUS();
+			permissionBUS = new PermissionBUS();
+		} catch (Exception e) {
+			e.printStackTrace();
+			JOptionPane.showMessageDialog(this, "Lỗi kết nối CSDL: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+		initComponents();
+		loadData();
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout());
+		setBackground(Color.WHITE);
+
+		tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+		tabbedPane.setFont(TAB_FONT);
+		tabbedPane.setBackground(Color.WHITE);
+
+		StyleTabbedPane styleTabbedPane = new StyleTabbedPane();
+		styleTabbedPane.styleTabbedPane(tabbedPane);
+
+		initNhanVienPanel();
+		initQuyenPanel();
+		initTaiKhoanPanel();
+
+		tabbedPane.addTab("Quản lý nhân viên", createTabComponent("Quản lý nhân viên", nhanVienTable));
+		tabbedPane.addTab("Phân quyền", createTabComponent("Phân quyền", quyenTable));
+		tabbedPane.addTab("Tài khoản", createTabComponent("Tài khoản", taiKhoanTable));
+
+		for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+			tabbedPane.setForegroundAt(i, new Color(50, 50, 50));
+		}
+
+		// Add tab change listener
+		tabbedPane.addChangeListener(e -> {
+			clearSearch();
+			updateFilterComboBox(tabbedPane.getSelectedIndex());
+		});
+
+		add(tabbedPane, BorderLayout.CENTER);
+		setOpaque(true);
+	}
+
+	private JPanel createTabComponent(String title, JTable table) {
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.setBackground(Color.WHITE);
+
+		JPanel topPanel = new JPanel(new BorderLayout());
+		topPanel.setBackground(Color.WHITE);
+		topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+		// Search and filter panel
+		JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		searchPanel.setBackground(Color.WHITE);
+
+		// Add filter combo box
+		filterComboBox = new JComboBox<>();
+		updateFilterComboBox(0); // Initialize with first tab's filters
+		searchPanel.add(new JLabel("Lọc theo: "));
+		searchPanel.add(filterComboBox);
+
+		txtTimKiem = new JTextField(20);
+		txtTimKiem.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyReleased(KeyEvent e) {
+				String searchText = txtTimKiem.getText();
+				handleSearch(searchText, table);
+			}
+		});
+		searchPanel.add(new JLabel("Tìm kiếm: "));
+		searchPanel.add(txtTimKiem);
+		StyleButton stybtn = new StyleButton();
+		// Refresh button
+		JButton btnRefresh = new JButton("Làm mới");
+		stybtn.styleButton(btnRefresh, true);
+		btnRefresh.addActionListener(e -> {
+			clearSearch();
+			loadData();
+		});
+		searchPanel.add(btnRefresh);
+
+		// Button panel
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		buttonPanel.setBackground(Color.WHITE);
+
+		JButton btnThem = new JButton("Thêm");
+		JButton btnSua = new JButton("Sửa");
+		JButton btnXoa = new JButton("Xóa");
+		JButton btnXuatExcel = new JButton("Xuất Excel");
+
+		stybtn.styleButton(btnThem, true);
+		stybtn.styleButton(btnSua, true);
+		stybtn.styleButton(btnXoa, true);
+		stybtn.styleButton(btnXuatExcel, true);
+
+		btnThem.addActionListener(e -> handleAdd(title));
+		btnSua.addActionListener(e -> handleEdit(table, title));
+		btnXoa.addActionListener(e -> handleDelete(table, title));
+		btnXuatExcel.addActionListener(e -> handleExport(title));
+
+		buttonPanel.add(btnThem);
+		buttonPanel.add(btnSua);
+		buttonPanel.add(btnXoa);
+		buttonPanel.add(btnXuatExcel);
+
+		topPanel.add(searchPanel, BorderLayout.WEST);
+		topPanel.add(buttonPanel, BorderLayout.EAST);
+
+		// Table scrollpane with custom UI
+		JScrollPane scrollPane = new JScrollPane(table);
+		scrollPane.getVerticalScrollBar().setUI(new CustomScrollBarUI());
+		scrollPane.getHorizontalScrollBar().setUI(new CustomScrollBarUI());
+
+		// Add table selection listener
+		table.getSelectionModel().addListSelectionListener(e -> {
+			boolean rowSelected = table.getSelectedRow() != -1;
+			btnSua.setEnabled(rowSelected);
+			btnXoa.setEnabled(rowSelected);
+		});
+
+		panel.add(topPanel, BorderLayout.NORTH);
+		panel.add(scrollPane, BorderLayout.CENTER);
+
+		return panel;
+	}
+
+	private void initNhanVienPanel() {
+		// Định nghĩa các cột cho bảng nhân viên
+		String[] columns = { "Mã NV", "Họ và tên", "Giới tính", "Ngày sinh", "SĐT", "Email", "Địa chỉ", "Trạng thái" };
+
+		// Khởi tạo model với các cột đã định nghĩa
+		nhanVienModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false; // Không cho phép edit trực tiếp trên bảng
+			}
+		};
+		nhanVienTable = new JTable(nhanVienModel);
+
+		// Thiết lập độ rộng cho các cột
+		nhanVienTable.getColumnModel().getColumn(0).setPreferredWidth(80); // Mã NV
+		nhanVienTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Họ và tên
+		nhanVienTable.getColumnModel().getColumn(2).setPreferredWidth(80); // Giới tính
+		nhanVienTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Ngày sinh
+		nhanVienTable.getColumnModel().getColumn(4).setPreferredWidth(100); // SĐT
+		nhanVienTable.getColumnModel().getColumn(5).setPreferredWidth(150); // Email
+		nhanVienTable.getColumnModel().getColumn(6).setPreferredWidth(200); // Địa chỉ
+		nhanVienTable.getColumnModel().getColumn(7).setPreferredWidth(100); // Trạng thái
+
+		// Custom renderer cho cột trạng thái
+		nhanVienTable.getColumnModel().getColumn(7).setCellRenderer(new DefaultTableCellRenderer() {
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+				String status = value.toString();
+				if (status.equals("Đang làm việc")) {
+					setForeground(new Color(0, 150, 0)); // Màu xanh cho trạng thái đang làm việc
+				} else {
+					setForeground(new Color(200, 0, 0)); // Màu đỏ cho trạng thái khác
+				}
+
+				return c;
+			}
+		});
+
+		// Căn giữa dữ liệu trong các cột
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		for (int i = 0; i < columns.length; i++) {
+			if (i != 1 && i != 5 && i != 6) { // Không căn giữa cột họ tên, email và địa chỉ
+				nhanVienTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+			}
+		}
+
+		setupTable(nhanVienTable);
+	}
+
+	private void initQuyenPanel() {
+		String[] columns = { "Mã quyền", "Tên quyền", "Mô tả", "Ngày tạo", "Trạng thái" };
+
+		quyenModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+		quyenTable = new JTable(quyenModel);
+
+		// Thiết lập độ rộng cho các cột
+		quyenTable.getColumnModel().getColumn(0).setPreferredWidth(100); // Mã quyền
+		quyenTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Tên quyền
+		quyenTable.getColumnModel().getColumn(2).setPreferredWidth(250); // Mô tả
+		quyenTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Ngày tạo
+		quyenTable.getColumnModel().getColumn(4).setPreferredWidth(100); // Trạng thái
+
+		// Custom renderer cho cột trạng thái
+		quyenTable.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer() {
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+				String status = value.toString();
+				if (status.equals("Đang sử dụng")) {
+					setForeground(new Color(0, 150, 0));
+				} else {
+					setForeground(new Color(200, 0, 0));
+				}
+
+				return c;
+			}
+		});
+
+		// Căn giữa dữ liệu trong các cột
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		for (int i = 0; i < columns.length; i++) {
+			if (i != 1 && i != 2) { // Không căn giữa cột tên quyền và mô tả
+				quyenTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+			}
+		}
+
+		setupTable(quyenTable);
+	}
+
+	private void initTaiKhoanPanel() {
+		String[] columns = { "Mã TK", "Tên đăng nhập", "Nhân viên", "Quyền", "Lần đăng nhập cuối", "Trạng thái" };
+
+		taiKhoanModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+		taiKhoanTable = new JTable(taiKhoanModel);
+
+		// Thiết lập độ rộng cho các cột
+		taiKhoanTable.getColumnModel().getColumn(0).setPreferredWidth(80); // Mã TK
+		taiKhoanTable.getColumnModel().getColumn(1).setPreferredWidth(120); // Tên đăng nhập
+		taiKhoanTable.getColumnModel().getColumn(2).setPreferredWidth(150); // Nhân viên
+		taiKhoanTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Quyền
+		taiKhoanTable.getColumnModel().getColumn(4).setPreferredWidth(150); // Lần đăng nhập cuối
+		taiKhoanTable.getColumnModel().getColumn(5).setPreferredWidth(100); // Trạng thái
+
+		// Custom renderer cho cột trạng thái
+		taiKhoanTable.getColumnModel().getColumn(5).setCellRenderer(new DefaultTableCellRenderer() {
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+				String status = value.toString();
+				if (status.equals("Đang hoạt động")) {
+					setForeground(new Color(0, 150, 0));
+				} else {
+					setForeground(new Color(200, 0, 0));
+				}
+
+				return c;
+			}
+		});
+
+		// Renderer cho cột thời gian đăng nhập
+		taiKhoanTable.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer() {
+			SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				if (value instanceof Date) {
+					value = dateFormat.format(value);
+				}
+				return super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+			}
+		});
+
+		// Căn giữa dữ liệu trong các cột
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		for (int i = 0; i < columns.length; i++) {
+			if (i != 2) { // Không căn giữa cột tên nhân viên
+				taiKhoanTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+			}
+		}
+
+		setupTable(taiKhoanTable);
+	}
+
+	private void setupTable(JTable table) {
+		// Thiết lập giao diện chung cho tất cả các bảng
+		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		table.getTableHeader().setReorderingAllowed(false);
+		table.getTableHeader().setFont(HEADER_FONT);
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(30);
+		table.setShowGrid(true);
+		table.setGridColor(Color.LIGHT_GRAY);
+
+		// Thiết lập màu nền cho header và các dòng
+		table.getTableHeader().setBackground(PRIMARY_COLOR);
+		table.getTableHeader().setForeground(Color.WHITE);
+
+		// Thiết lập màu nền xen kẽ cho các dòng
+		table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+				if (!isSelected) {
+					c.setBackground(row % 2 == 0 ? Color.WHITE : new Color(245, 245, 245));
+				} else {
+					c.setBackground(new Color(232, 57, 95, 50));
+				}
+
+				return c;
+			}
+		});
+	}
+
+	private void updateFilterComboBox(int tabIndex) {
+		filterComboBox.removeAllItems();
+		switch (tabIndex) {
+		case 0: // Nhân viên
+			filterComboBox.addItem("Tất cả");
+			filterComboBox.addItem("Mã NV");
+			filterComboBox.addItem("Họ tên");
+			filterComboBox.addItem("Giới tính");
+			filterComboBox.addItem("SĐT");
+			break;
+		case 1: // Phân quyền
+			filterComboBox.addItem("Tất cả");
+			filterComboBox.addItem("Mã quyền");
+			filterComboBox.addItem("Tên quyền");
+			break;
+		case 2: // Tài khoản
+			filterComboBox.addItem("Tất cả");
+			filterComboBox.addItem("Mã NV");
+			filterComboBox.addItem("Tên đăng nhập");
+			filterComboBox.addItem("Trạng thái");
+			break;
+		}
+	}
+
+	private void handleSearch(String searchText, JTable table) {
+		TableRowSorter<TableModel> sorter = new TableRowSorter<>(table.getModel());
+		table.setRowSorter(sorter);
+
+		if (searchText.trim().isEmpty()) {
+			sorter.setRowFilter(null);
+			return;
+		}
+
+		String filterType = filterComboBox.getSelectedItem().toString();
+		RowFilter<Object, Object> filter;
+
+		if (filterType.equals("Tất cả")) {
+			filter = RowFilter.regexFilter("(?i)" + searchText);
+		} else {
+			int columnIndex = getColumnIndexForFilter(filterType, table);
+			filter = RowFilter.regexFilter("(?i)" + searchText, columnIndex);
+		}
+
+		sorter.setRowFilter(filter);
+	}
+
+	private int getColumnIndexForFilter(String filterType, JTable table) {
+		TableModel model = table.getModel();
+		for (int i = 0; i < model.getColumnCount(); i++) {
+			if (model.getColumnName(i).contains(filterType)) {
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	private void handleEdit(JTable table, String tabTitle) {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow == -1) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn một dòng để chỉnh sửa", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		if (tabTitle.contains("nhân viên")) {
+			String userID = table.getValueAt(table.getSelectedRow(), 0).toString();
+			try {
+				User user = userBUS.getUserById(userID);
+				if (user != null) {
+					User updatedUser = SuaNhanVienDialog.showDialog((Frame) SwingUtilities.getWindowAncestor(this),
+							user);
+					if (updatedUser != null) {
+						boolean success = userBUS.updateUser(updatedUser);
+						if (success) {
+							refreshNhanVienTable();
+							refreshTaiKhoanTable();
+							JOptionPane.showMessageDialog(this, "Cập nhật nhân viên thành công!", "Thông báo",
+									JOptionPane.INFORMATION_MESSAGE);
+						}
+					}
+				}
+			} catch (Exception e) {
+				JOptionPane.showMessageDialog(this, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+			}
+		} else if (tabTitle.contains("quyền")) {
+			editPermission(table);
+		} else if (tabTitle.contains("tài khoản")) {
+			editUserAccount(table);
+		}
+	}
+
+	private void editPermission(JTable table) {
+		String permID = table.getValueAt(table.getSelectedRow(), 0).toString();
+		String currentName = table.getValueAt(table.getSelectedRow(), 1).toString();
+
+		// Create custom dialog for permission editing
+		JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Sửa quyền", true);
+		dialog.setLayout(new BorderLayout(10, 10));
+
+		JPanel inputPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+		inputPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+		JTextField nameField = new JTextField(currentName);
+		JTextArea descArea = new JTextArea(3, 20);
+
+		inputPanel.add(new JLabel("Tên quyền:"));
+		inputPanel.add(nameField);
+		inputPanel.add(new JLabel("Mô tả:"));
+		inputPanel.add(new JScrollPane(descArea));
+
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton saveButton = new JButton("Lưu");
+		JButton cancelButton = new JButton("Hủy");
+		StyleButton stB = new StyleButton();
+		stB.styleButton(saveButton , true);
+		stB.styleButton(cancelButton, true);
+
+		buttonPanel.add(saveButton);
+		buttonPanel.add(cancelButton);
+
+		dialog.add(inputPanel, BorderLayout.CENTER);
+		dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+		saveButton.addActionListener(e -> {
+			try {
+				Permission perm = new Permission();
+				perm.setPermissionID(permID);
+				perm.setName(nameField.getText().trim());
+				perm.setDescription(descArea.getText().trim());
+
+				if (permissionBUS.updatePermission(perm)) {
+					refreshQuyenTable();
+					JOptionPane.showMessageDialog(dialog, "Cập nhật quyền thành công!");
+					dialog.dispose();
+				}
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(dialog, "Lỗi: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+			}
+		});
+
+		cancelButton.addActionListener(e -> dialog.dispose());
+
+		dialog.pack();
+		dialog.setLocationRelativeTo(this);
+		dialog.setVisible(true);
+	}
+
+	private void editUserAccount(JTable table) {
+		String userID = table.getValueAt(table.getSelectedRow(), 0).toString();
+		User user = userBUS.getUserById(userID);
+
+		if (user == null) {
+			JOptionPane.showMessageDialog(this, "Không tìm thấy thông tin tài khoản!", "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+
+		JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Cập nhật tài khoản", true);
+		dialog.setLayout(new BorderLayout(10, 10));
+
+		JPanel inputPanel = new JPanel(new GridLayout(4, 2, 5, 5));
+		inputPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+		JTextField usernameField = new JTextField(user.getUsername());
+		JPasswordField passwordField = new JPasswordField();
+		JComboBox<String> roleCombo = new JComboBox<>(new String[] { "Admin", "User", "Manager" });
+		JComboBox<String> statusCombo = new JComboBox<>(new String[] { "Đang hoạt động", "Ngừng hoạt động" });
+
+		roleCombo.setSelectedItem(user.getRole());
+		statusCombo.setSelectedItem(user.getStatus());
+
+		inputPanel.add(new JLabel("Tên đăng nhập:"));
+		inputPanel.add(usernameField);
+		inputPanel.add(new JLabel("Mật khẩu mới:"));
+		inputPanel.add(passwordField);
+		inputPanel.add(new JLabel("Nhóm quyền:"));
+		inputPanel.add(roleCombo);
+		inputPanel.add(new JLabel("Trạng thái:"));
+		inputPanel.add(statusCombo);
+
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton saveButton = new JButton("Lưu");
+		JButton cancelButton = new JButton("Hủy");
+
+		styleButton(saveButton);
+		styleButton(cancelButton);
+
+		saveButton.addActionListener(e -> {
+			try {
+				String password = new String(passwordField.getPassword());
+				user.setUsername(usernameField.getText().trim());
+				if (!password.isEmpty()) {
+					user.setPassword(password); // Consider hashing the password
+				}
+				user.setRole(roleCombo.getSelectedItem().toString());
+				user.setStatus(statusCombo.getSelectedItem().toString());
+
+				if (userBUS.updateUser(user)) {
+					refreshTaiKhoanTable();
+					JOptionPane.showMessageDialog(dialog, "Cập nhật tài khoản thành công!");
+					dialog.dispose();
+				}
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(dialog, "Lỗi: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+			}
+		});
+
+		cancelButton.addActionListener(e -> dialog.dispose());
+
+		buttonPanel.add(saveButton);
+		buttonPanel.add(cancelButton);
+
+		dialog.add(inputPanel, BorderLayout.CENTER);
+		dialog.add(buttonPanel, BorderLayout.SOUTH);
+		dialog.pack();
+		dialog.setLocationRelativeTo(this);
+		dialog.setVisible(true);
+	}
+
+	private void handleExport(String tabTitle) {
+		try {
+			JFileChooser fileChooser = new JFileChooser();
+			fileChooser.setDialogTitle("Lưu file Excel");
+			fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Excel Files", "xlsx"));
+
+			if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+				String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+				if (!filePath.endsWith(".xlsx")) {
+					filePath += ".xlsx";
+				}
+
+				ExcelExporterNV exporter = new ExcelExporterNV();
+				if (tabTitle.contains("nhân viên")) {
+					exporter.exportEmployees(userBUS.getAllUsers(), filePath);
+				} else if (tabTitle.contains("quyền")) {
+					exporter.exportPermissions(permissionBUS.getAllPermissions(), filePath);
+				} else if (tabTitle.contains("tài khoản")) {
+					exporter.exportAccounts(userBUS.getAllUsers(), filePath);
+				}
+
+				JOptionPane.showMessageDialog(this, "Xuất Excel thành công!", "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi xuất Excel: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Add method to handle permission assignment
+	private void assignPermissions(User user) {
+		JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Phân quyền người dùng", true);
+		dialog.setLayout(new BorderLayout(10, 10));
+
+		// Create permission checkboxes panel
+		JPanel permPanel = new JPanel(new GridLayout(0, 1, 5, 5));
+		permPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+		List<Permission> allPermissions = permissionBUS.getAllPermissions();
+		Map<String, JCheckBox> permissionBoxes = new HashMap<>();
+
+		for (Permission perm : allPermissions) {
+			JCheckBox checkbox = new JCheckBox(perm.getName());
+			checkbox.setSelected(userBUS.hasPermission(user.getUserID(), perm.getPermissionID()));
+			permissionBoxes.put(perm.getPermissionID(), checkbox);
+			permPanel.add(checkbox);
+		}
+
+		JScrollPane scrollPane = new JScrollPane(permPanel);
+		scrollPane.setPreferredSize(new Dimension(300, 400));
+
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton saveButton = new JButton("Lưu");
+		JButton cancelButton = new JButton("Hủy");
+		StyleButton stBtn = new StyleButton();
+		stBtn.styleButton(saveButton, true);
+		stBtn.styleButton(cancelButton, true);
+
+		saveButton.addActionListener(e -> {
+			try {
+				// Update user permissions
+				for (Map.Entry<String, JCheckBox> entry : permissionBoxes.entrySet()) {
+					String permID = entry.getKey();
+					boolean isSelected = entry.getValue().isSelected();
+
+					if (isSelected && !userBUS.hasPermission(user.getUserID(), permID)) {
+						userBUS.assignPermission(user.getUserID(), permID);
+					} else if (!isSelected && userBUS.hasPermission(user.getUserID(), permID)) {
+						userBUS.removePermission(user.getUserID(), permID);
+					}
+				}
+
+				JOptionPane.showMessageDialog(dialog, "Cập nhật phân quyền thành công!");
+				dialog.dispose();
+				refreshQuyenTable();
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(dialog, "Lỗi: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+			}
+		});
+
+		cancelButton.addActionListener(e -> dialog.dispose());
+
+		buttonPanel.add(saveButton);
+		buttonPanel.add(cancelButton);
+
+		dialog.add(scrollPane, BorderLayout.CENTER);
+		dialog.add(buttonPanel, BorderLayout.SOUTH);
+		dialog.pack();
+		dialog.setLocationRelativeTo(this);
+		dialog.setVisible(true);
+	}
+
+	// Add contextual menu for additional actions
+	private void addContextMenu(JTable table) {
+		JPopupMenu contextMenu = new JPopupMenu();
+		JMenuItem viewDetailsItem = new JMenuItem("Xem chi tiết");
+		JMenuItem assignPermItem = new JMenuItem("Phân quyền");
+		JMenuItem resetPasswordItem = new JMenuItem("Đặt lại mật khẩu");
+
+		viewDetailsItem.addActionListener(e -> {
+			int row = table.getSelectedRow();
+			if (row != -1) {
+				String userID = table.getValueAt(row, 0).toString();
+				showUserDetails(userID);
+			}
+		});
+
+		assignPermItem.addActionListener(e -> {
+			int row = table.getSelectedRow();
+			if (row != -1) {
+				String userID = table.getValueAt(row, 0).toString();
+				User user = userBUS.getUserById(userID);
+				if (user != null) {
+					assignPermissions(user);
+				}
+			}
+		});
+
+		resetPasswordItem.addActionListener(e -> {
+			int row = table.getSelectedRow();
+			if (row != -1) {
+				String userID = table.getValueAt(row, 0).toString();
+				resetUserPassword(userID);
+			}
+		});
+
+		contextMenu.add(viewDetailsItem);
+		contextMenu.add(assignPermItem);
+		contextMenu.add(resetPasswordItem);
+
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					int row = table.rowAtPoint(e.getPoint());
+					if (row != -1) {
+						table.setRowSelectionInterval(row, row);
+						contextMenu.show(e.getComponent(), e.getX(), e.getY());
+					}
+				}
+			}
+		});
+	}
+
+	private void resetUserPassword(String userID) {
+		int confirm = JOptionPane.showConfirmDialog(this, "Bạn có chắc chắn muốn đặt lại mật khẩu cho người dùng này?",
+				"Xác nhận đặt lại mật khẩu", JOptionPane.YES_NO_OPTION);
+
+		if (confirm == JOptionPane.YES_OPTION) {
+			try {
+				String newPassword = generateRandomPassword();
+				if (userBUS.resetPassword(userID, newPassword)) {
+					JOptionPane.showMessageDialog(this,
+							"Mật khẩu mới: " + newPassword + "\nVui lòng thông báo cho người dùng!",
+							"Đặt lại mật khẩu thành công", JOptionPane.INFORMATION_MESSAGE);
+				}
+			} catch (Exception e) {
+				JOptionPane.showMessageDialog(this, "Lỗi khi đặt lại mật khẩu: " + e.getMessage(), "Lỗi",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	private String generateRandomPassword() {
+		// Generate a random password with numbers and letters
+		String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+		StringBuilder sb = new StringBuilder();
+		Random random = new Random();
+		for (int i = 0; i < 8; i++) {
+			sb.append(chars.charAt(random.nextInt(chars.length())));
+		}
+		return sb.toString();
+	}
+
+	private void loadData() {
+		refreshNhanVienTable();
+		refreshQuyenTable();
+		refreshTaiKhoanTable();
+	}
+
+	private void refreshNhanVienTable() {
+		try {
+			nhanVienModel.setRowCount(0); // Clear current data
+			List<User> users = userBUS.getAllUsers();
+
+			for (User user : users) {
+				Object[] row = { user.getUserID(), user.getFullName(), user.getGender(),
+						user.getBirthDate() != null ? dateFormat.format(user.getBirthDate()) : "", user.getPhone(),
+						user.getEmail(), user.getAddress(), user.getStatus() };
+				nhanVienModel.addRow(row);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu nhân viên: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void refreshQuyenTable() {
+		try {
+			quyenModel.setRowCount(0); // Clear current data
+			List<Permission> permissions = permissionBUS.getAllPermissions();
+
+			for (Permission perm : permissions) {
+				Object[] row = { perm.getPermissionID(), perm.getName(), perm.getDescription(),
+						perm.getCreatedDate() != null ? dateFormat.format(perm.getCreatedDate()) : "",
+						perm.getStatus() };
+				quyenModel.addRow(row);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu quyền: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void refreshTaiKhoanTable() {
+		try {
+			taiKhoanModel.setRowCount(0); // Clear current data
+			List<User> users = userBUS.getAllUsers();
+			SimpleDateFormat lastLoginFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+
+			for (User user : users) {
+				Object[] row = { user.getUserID(), user.getUsername(), user.getFullName(), // Display full name of the
+																							// employee
+						user.getRole(),
+						user.getLastLogin() != null ? lastLoginFormat.format(user.getLastLogin()) : "Chưa đăng nhập",
+						user.getStatus() };
+				taiKhoanModel.addRow(row);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu tài khoản: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Helper method to load data for a specific user
+	private void loadUserData(String userID) {
+		try {
+			User user = userBUS.getUserById(userID);
+			if (user != null) {
+				// Clear and reload nhân viên table with just this user
+				nhanVienModel.setRowCount(0);
+				Object[] row = { user.getUserID(), user.getFullName(), user.getGender(),
+						user.getBirthDate() != null ? dateFormat.format(user.getBirthDate()) : "", user.getPhone(),
+						user.getEmail(), user.getAddress(), user.getStatus() };
+				nhanVienModel.addRow(row);
+
+				// Also update the tài khoản table
+				taiKhoanModel.setRowCount(0);
+				SimpleDateFormat lastLoginFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+				Object[] accountRow = { user.getUserID(), user.getUsername(), user.getFullName(), user.getRole(),
+						user.getLastLogin() != null ? lastLoginFormat.format(user.getLastLogin()) : "Chưa đăng nhập",
+						user.getStatus() };
+				taiKhoanModel.addRow(accountRow);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu người dùng: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Helper method to load data for a specific permission
+	private void loadPermissionData(String permissionID) {
+		try {
+			Permission permission = permissionBUS.getPermissionById(permissionID);
+			if (permission != null) {
+				quyenModel.setRowCount(0);
+				Object[] row = { permission.getPermissionID(), permission.getName(), permission.getDescription(),
+						permission.getCreatedDate() != null ? dateFormat.format(permission.getCreatedDate()) : "",
+						permission.getStatus() };
+				quyenModel.addRow(row);
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu quyền: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Method to handle data refresh after updates
+	public void refreshData() {
+		loadData();
+		// Reset any filters or search criteria
+		if (txtTimKiem != null) {
+			txtTimKiem.setText("");
+		}
+		// Reset any sorting
+		if (nhanVienTable != null && nhanVienTable.getRowSorter() != null) {
+			nhanVienTable.getRowSorter().setSortKeys(null);
+		}
+		if (quyenTable != null && quyenTable.getRowSorter() != null) {
+			quyenTable.getRowSorter().setSortKeys(null);
+		}
+		if (taiKhoanTable != null && taiKhoanTable.getRowSorter() != null) {
+			taiKhoanTable.getRowSorter().setSortKeys(null);
+		}
+	}
+
+	private void clearSearch() {
+		// Clear search text field
+		if (txtTimKiem != null) {
+			txtTimKiem.setText("");
+		}
+
+		// Reset filter combo box to "Tất cả" if it exists
+		if (filterComboBox != null) {
+			filterComboBox.setSelectedIndex(0);
+		}
+
+		// Clear any sorting in tables
+		if (nhanVienTable != null && nhanVienTable.getRowSorter() != null) {
+			nhanVienTable.getRowSorter().setSortKeys(null);
+		}
+
+		if (quyenTable != null && quyenTable.getRowSorter() != null) {
+			quyenTable.getRowSorter().setSortKeys(null);
+		}
+
+		if (taiKhoanTable != null && taiKhoanTable.getRowSorter() != null) {
+			taiKhoanTable.getRowSorter().setSortKeys(null);
+		}
+
+		// Reset row filters
+		handleSearch("", nhanVienTable);
+		handleSearch("", quyenTable);
+		handleSearch("", taiKhoanTable);
+	}
+}

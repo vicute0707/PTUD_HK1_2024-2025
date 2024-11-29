@@ -1,0 +1,161 @@
+package dialog;
+
+import com.github.lgooddatepicker.components.DatePicker;
+import javax.swing.*;
+import javax.swing.border.*;
+import java.awt.*;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Date;
+import entity.User;
+
+public class EmployeeDialog extends JDialog {
+    private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+    private static final Font LABEL_FONT = new Font("Roboto", Font.BOLD, 13);
+    private static final Font INPUT_FONT = new Font("Roboto", Font.PLAIN, 13);
+    
+    private final User user;
+    private boolean confirmed = false;
+    
+    private JTextField txtFullName;
+    private JComboBox<String> cboGender;
+    private DatePicker datePicker;
+    private JTextField txtPhone;
+    private JTextField txtEmail;
+    private JComboBox<String> cboRole;
+
+    public EmployeeDialog(Frame owner, String title, User user, boolean isNew) {
+        super(owner, title, true);
+        this.user = user;
+        initComponents();
+        loadUserData();
+    }
+
+    private void initComponents() {
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        mainPanel.setBackground(Color.WHITE);
+
+        // Form panel
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBackground(Color.WHITE);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Add components with styled labels
+        addFormRow(formPanel, gbc, 0, "Họ tên:", createTextField());
+        addFormRow(formPanel, gbc, 1, "Giới tính:", createGenderComboBox());
+        addFormRow(formPanel, gbc, 2, "Ngày sinh:", createDatePicker());
+        addFormRow(formPanel, gbc, 3, "SDT:", createTextField());
+        addFormRow(formPanel, gbc, 4, "Email:", createTextField());
+        addFormRow(formPanel, gbc, 5, "Vai trò:", createRoleComboBox());
+
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.add(createStyledButton("Lưu", true));
+        buttonPanel.add(createStyledButton("Hủy", false));
+
+        mainPanel.add(formPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        setContentPane(mainPanel);
+        pack();
+        setSize(450, 400);
+        setLocationRelativeTo(getOwner());
+    }
+
+    private JTextField createTextField() {
+        JTextField field = new JTextField(20);
+        field.setFont(INPUT_FONT);
+        field.setPreferredSize(new Dimension(200, 30));
+        return field;
+    }
+
+    private JComboBox<String> createGenderComboBox() {
+        JComboBox<String> combo = new JComboBox<>(new String[]{"Nam", "Nữ"});
+        combo.setFont(INPUT_FONT);
+        combo.setPreferredSize(new Dimension(200, 30));
+        return combo;
+    }
+
+    private DatePicker createDatePicker() {
+        DatePicker picker = new DatePicker();
+        picker.setFont(INPUT_FONT);
+        picker.setPreferredSize(new Dimension(200, 30));
+        return picker;
+    }
+
+    private JComboBox<String> createRoleComboBox() {
+        JComboBox<String> combo = new JComboBox<>(new String[]{"Admin", "Nhân viên kho", "Nhân viên bán hàng"});
+        combo.setFont(INPUT_FONT);
+        combo.setPreferredSize(new Dimension(200, 30));
+        return combo;
+    }
+
+    private JButton createStyledButton(String text, boolean isPrimary) {
+        JButton button = new JButton(text);
+        button.setFont(INPUT_FONT);
+        button.setPreferredSize(new Dimension(100, 35));
+        if (isPrimary) {
+            button.setBackground(PRIMARY_COLOR);
+            button.setForeground(Color.WHITE);
+            button.addActionListener(e -> save());
+        } else {
+            button.setBackground(Color.WHITE);
+            button.setForeground(Color.BLACK);
+            button.addActionListener(e -> dispose());
+        }
+        button.setFocusPainted(false);
+        return button;
+    }
+
+    private void addFormRow(JPanel panel, GridBagConstraints gbc, int row, String labelText, JComponent component) {
+        gbc.gridy = row;
+        
+        gbc.gridx = 0;
+        gbc.weightx = 0.3;
+        JLabel label = new JLabel(labelText);
+        label.setFont(LABEL_FONT);
+        panel.add(label, gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 0.7;
+        panel.add(component, gbc);
+    }
+
+    private void loadUserData() {
+        if (user != null) {
+            txtFullName.setText(user.getFullName());
+            cboGender.setSelectedItem(user.getGender());
+            if (user.getBirthDate() != null) {
+                LocalDate localDate = user.getBirthDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                datePicker.setDate(localDate);
+            }
+            txtPhone.setText(user.getPhone());
+            txtEmail.setText(user.getEmail());
+            cboRole.setSelectedItem(user.getRole());
+        }
+    }
+
+    private void save() {
+        try {
+            user.setFullName(txtFullName.getText());
+            user.setGender(cboGender.getSelectedItem().toString());
+            LocalDate localDate = datePicker.getDate();
+            user.setBirthDate(Date.from(localDate.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+            user.setPhone(txtPhone.getText());
+            user.setEmail(txtEmail.getText());
+            user.setRole(cboRole.getSelectedItem().toString());
+            confirmed = true;
+            dispose();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    public boolean isConfirmed() {
+        return confirmed;
+    }
+}

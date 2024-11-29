@@ -1,0 +1,106 @@
+package component;
+
+import java.text.SimpleDateFormat;
+
+import javax.swing.*;
+
+import dialog.SuaNhanVienDialog;
+import dialog.ThemNhanVienDialog;
+import entity.User;
+
+
+public class EmployeeManagementTab extends AbstractManagementTab {
+    public EmployeeManagementTab() {
+        super("Quản lý nhân viên",
+            new String[]{"Mã NV", "Họ và tên", "Giới tính", "Ngày sinh", "SDT", "Email"},
+            createSampleEmployeeData());
+    }
+
+    @Override
+    protected void handleAdd() {
+        User newUser = ThemNhanVienDialog.showDialog(SwingUtilities.getWindowAncestor(this));
+        if (newUser != null) {
+            try {
+                // Thử thêm user mới vào database
+                if (userBUS.addUser(newUser)) {
+                    // Nếu thêm thành công, cập nhật table
+                    DefaultTableModel model = (DefaultTableModel) table.getModel();
+                    model.addRow(new Object[]{
+                        newUser.getUserID(),
+                        newUser.getFullName(),
+                        newUser.getGender(),
+                        new SimpleDateFormat("dd/MM/yyyy").format(newUser.getBirthDate()),
+                        newUser.getPhone(),
+                        newUser.getEmail()
+                    });
+                    JOptionPane.showMessageDialog(this,
+                        "Thêm nhân viên thành công!",
+                        "Thông báo",
+                        JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this,
+                    "Lỗi: " + e.getMessage(),
+                    "Lỗi",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    @Override
+    protected void handleEdit() {
+        if (!isRowSelected()) {
+            JOptionPane.showMessageDialog(this,
+                "Vui lòng chọn nhân viên cần sửa",
+                "Thông báo",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            // Lấy thông tin nhân viên đang chọn
+            String userID = table.getValueAt(table.getSelectedRow(), 0).toString();
+            User currentUser = userBUS.getUserById(userID);
+            
+            if (currentUser == null) {
+                throw new Exception("Không tìm thấy thông tin nhân viên");
+            }
+
+            // Hiện dialog sửa thông tin
+            User updatedUser = SuaNhanVienDialog.showDialog(
+                SwingUtilities.getWindowAncestor(this), 
+                currentUser
+            );
+
+            if (updatedUser != null) {
+                // Cập nhật vào database
+                if (userBUS.updateUser(updatedUser)) {
+                    // Nếu cập nhật thành công, cập nhật table
+                    int row = table.getSelectedRow();
+                    table.setValueAt(updatedUser.getFullName(), row, 1);
+                    table.setValueAt(updatedUser.getGender(), row, 2);
+                    table.setValueAt(new SimpleDateFormat("dd/MM/yyyy").format(updatedUser.getBirthDate()), row, 3);
+                    table.setValueAt(updatedUser.getPhone(), row, 4);
+                    table.setValueAt(updatedUser.getEmail(), row, 5);
+
+                    JOptionPane.showMessageDialog(this,
+                        "Cập nhật thông tin thành công!",
+                        "Thông báo", 
+                        JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Lỗi: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private static Object[][] createSampleEmployeeData() {
+        return new Object[][] {
+            {"NV001", "Nguyễn Văn A", "Nam", "1990-01-01", "0123456789", "nva@email.com"},
+            {"NV002", "Trần Thị B", "Nữ", "1992-02-02", "0987654321", "ttb@email.com"}
+        };
+    }
+}

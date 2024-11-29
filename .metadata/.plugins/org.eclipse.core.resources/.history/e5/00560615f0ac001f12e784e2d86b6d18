@@ -1,0 +1,227 @@
+package component;
+
+import entity.User;
+import entity.UserRole;
+import bus.UserBUS;
+import bus.UserRoleBUS;
+import dialog.EmployeeDialog;
+
+import javax.swing.*;
+import java.util.List;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.text.SimpleDateFormat;
+
+public class EmployeeManagementPanel extends BaseManagementPanel {
+    private final UserBUS userBUS;
+    private final UserRoleBUS userRoleBUS;
+    private final SimpleDateFormat dateFormat;
+    private JComboBox<String> roleComboBox;
+
+    public EmployeeManagementPanel() {
+        super("Quản lý nhân viên", new String[] { "Mã NV", "Họ tên", "Tên đăng nhập", "Giới tính", "Ngày sinh", "SDT",
+                "Email", "Vai trò", "Trạng thái" }, loadEmployeeData());
+        userBUS = new UserBUS();
+        userRoleBUS = new UserRoleBUS();
+        dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        initializeRoleComboBox();
+        setupSearchFunction();
+    }
+
+    private void setupSearchFunction() {
+        searchField.addActionListener(e -> handleSearch());
+    }
+
+    private void handleSearch() {
+        String keyword = searchField.getText().trim();
+        try {
+            List<User> searchResults = userBUS.searchUsers(keyword);
+            updateTableData(searchResults);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi tìm kiếm: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void initializeRoleComboBox() {
+        roleComboBox = new JComboBox<>();
+        loadRoles();
+        
+        // Add to toolbar if needed
+        if (toolBar != null) {
+            toolBar.add(new JLabel("Vai trò: "));
+            toolBar.add(roleComboBox);
+        }
+    }
+
+    private void loadRoles() {
+        try {
+            List<UserRole> roles = userRoleBUS.getAllRoles();
+            roleComboBox.removeAllItems();
+            roleComboBox.addItem("Tất cả"); // Add "All" option
+            for (UserRole role : roles) {
+                roleComboBox.addItem(role.getRoleName());
+            }
+            
+            // Add role filter listener
+            roleComboBox.addActionListener(e -> {
+                String selectedRole = (String) roleComboBox.getSelectedItem();
+                filterByRole(selectedRole);
+            });
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi tải danh sách vai trò: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void filterByRole(String selectedRole) {
+        try {
+            List<User> filteredUsers;
+            if (selectedRole == null || selectedRole.equals("Tất cả")) {
+                filteredUsers = userBUS.getAllUsers();
+            } else {
+                // Assuming you have a method to get users by role in UserBUS
+                filteredUsers = userBUS.getUsersByRole(selectedRole);
+            }
+            updateTableData(filteredUsers);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi lọc theo vai trò: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    @Override
+    protected void handleAdd() {
+        try {
+            User user = new User();
+            user.setUserID(userBUS.generateNewUserID());
+            user.setStatus("Đang hoạt động"); // Set default status
+
+            EmployeeDialog dialog = new EmployeeDialog(
+                (JFrame) SwingUtilities.getWindowAncestor(this),
+                "Thêm nhân viên mới",
+                user,
+                true
+            );
+            dialog.setVisible(true);
+
+            if (dialog.isConfirmed()) {
+                boolean success = userBUS.addUser(user);
+                if (success) {
+                    refreshTable();
+                    JOptionPane.showMessageDialog(this, "Thêm nhân viên thành công!");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Không thể thêm nhân viên.",
+                            "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi thêm nhân viên: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void refreshTable() {
+        try {
+            List<User> users = userBUS.getAllUsers();
+            updateTableData(users);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi làm mới bảng: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void updateTableData(List<User> users) {
+        tableModel.setRowCount(0);
+        for (User user : users) {
+            tableModel.addRow(new Object[] {
+                user.getUserID(),
+                user.getFullName(),
+                user.getUsername(),
+                user.getGender(),
+                dateFormat.format(user.getBirthDate()),
+                user.getPhone(),
+                user.getEmail(),
+                user.getRole(),
+                user.getStatus()
+            });
+        }
+    }
+
+    @Override
+    protected void handleExport() {
+        try {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Chọn vị trí lưu file Excel");
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+                if (!filePath.endsWith(".xlsx")) {
+                    filePath += ".xlsx";
+                }
+                
+                // Export to Excel using your preferred library (e.g., Apache POI)
+                exportToExcel(filePath);
+                JOptionPane.showMessageDialog(this, "Xuất file Excel thành công!");
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi xuất file: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void exportToExcel(String filePath) {
+        // Implement Excel export logic here using Apache POI or similar library
+        // This is just a placeholder - you'll need to implement the actual export logic
+        throw new UnsupportedOperationException("Chức năng xuất Excel chưa được cài đặt");
+    }
+
+    @Override
+    protected void handlePrint() {
+        try {
+            // Create a print job
+            boolean complete = table.print(
+                JTable.PrintMode.FIT_WIDTH,
+                new MessageFormat("Danh sách nhân viên"),
+                new MessageFormat("Trang {0}"),
+                true,
+                null,
+                true
+            );
+            
+            if (complete) {
+                JOptionPane.showMessageDialog(this, "In thành công!");
+            } else {
+                JOptionPane.showMessageDialog(this, "In bị hủy hoặc thất bại",
+                        "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi in: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private static Object[][] loadEmployeeData() {
+        UserBUS bus = new UserBUS();
+        List<User> users = bus.getAllUsers();
+        Object[][] data = new Object[users.size()][9];
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        for (int i = 0; i < users.size(); i++) {
+            User user = users.get(i);
+            data[i] = new Object[] {
+                user.getUserID(),
+                user.getFullName(),
+                user.getUsername(),
+                user.getGender(),
+                sdf.format(user.getBirthDate()),
+                user.getPhone(),
+                user.getEmail(),
+                user.getRole(),
+                user.getStatus()
+            };
+        }
+        return data;
+    }
+}

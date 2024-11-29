@@ -1,0 +1,211 @@
+package dao;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import entity.SanPham;
+import entity.DanhMuc;
+import util.DatabaseConnection;
+
+public class SanPhamDAO {
+	private Connection conn = null;
+	private PreparedStatement pstmt = null;
+	private ResultSet rs = null;
+	private DanhMucDAO danhMucDAO;
+
+	public SanPhamDAO() {
+		danhMucDAO = new DanhMucDAO();
+	}
+
+	/**
+	 * Lấy tất cả sản phẩm từ cơ sở dữ liệu
+	 */
+	public List<SanPham> getAllSanPham() {
+		List<SanPham> danhSachSanPham = new ArrayList<>();
+		String sql = "SELECT * FROM product WHERE status = 'active'";
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			rs = pstmt.executeQuery();
+
+			while (rs.next()) {
+				SanPham sanPham = createSanPhamFromResultSet(rs);
+				danhSachSanPham.add(sanPham);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			closeResources();
+		}
+
+		return danhSachSanPham;
+	}
+
+	/**
+	 * Tìm sản phẩm theo ID
+	 */
+	public SanPham getSanPhamById(String maSP) {
+		String sql = "SELECT * FROM product WHERE productID = ? AND status = 'active'";
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, maSP);
+			rs = pstmt.executeQuery();
+
+			if (rs.next()) {
+				return createSanPhamFromResultSet(rs);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			closeResources();
+		}
+
+		return null;
+	}
+
+	/**
+	 * Thêm sản phẩm mới
+	 */
+	public boolean addSanPham(SanPham sanPham) {
+		String sql = "CALL sp_AddProduct(?, ?, ?, ?, ?, ?, ?)";
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			setPreparedStatementParameters(pstmt, sanPham);
+			return pstmt.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			closeResources();
+		}
+	}
+
+	/**
+	 * Cập nhật thông tin sản phẩm
+	 */
+	public boolean updateSanPham(SanPham sanPham) {
+		String sql = "CALL sp_UpdateProduct(?, ?, ?, ?, ?, ?, ?, ?)";
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			setPreparedStatementParameters(pstmt, sanPham);
+			pstmt.setString(8, sanPham.getTinhTrang());
+			return pstmt.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			closeResources();
+		}
+	}
+
+	/**
+	 * Xóa sản phẩm (cập nhật trạng thái thành inactive)
+	 */
+	public boolean deleteSanPham(String maSP) {
+		String sql = "CALL sp_DeleteProduct(?)";
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, maSP);
+			return pstmt.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			closeResources();
+		}
+	}
+
+	/**
+	 * Tìm kiếm sản phẩm theo các tiêu chí khác nhau
+	 */
+	public List<SanPham> searchSanPham(String keyword, String searchType) {
+		List<SanPham> ketQua = new ArrayList<>();
+		String sql = buildSearchQuery(searchType);
+
+		try {
+			conn = DatabaseConnection.getConnection();
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, "%" + keyword + "%");
+			rs = pstmt.executeQuery();
+
+			while (rs.next()) {
+				SanPham sanPham = createSanPhamFromResultSet(rs);
+				ketQua.add(sanPham);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			closeResources();
+		}
+
+		return ketQua;
+	}
+
+	// Helper Methods
+	private SanPham createSanPhamFromResultSet(ResultSet rs) throws SQLException {
+		SanPham sanPham = new SanPham();
+		sanPham.setMaSP(rs.getString("productID"));
+		sanPham.setTenSP(rs.getString("name"));
+
+		// Lấy thông tin danh mục
+		String maDM = rs.getString("category");
+		DanhMuc danhMuc = danhMucDAO.getDanhMucById(maDM);
+		sanPham.setDanhMuc(danhMuc);
+
+		sanPham.setSoLuongTon(rs.getInt("stockQuantity"));
+		sanPham.setGiaNhap(rs.getDouble("importPrice"));
+		sanPham.setGiaBan(rs.getDouble("sellPrice"));
+		sanPham.setThuongHieu(rs.getString("brand"));
+		sanPham.setHinhAnh(rs.getString("imagePath"));
+		sanPham.setTinhTrang(rs.getString("status"));
+
+		return sanPham;
+	}
+
+	private void setPreparedStatementParameters(PreparedStatement pstmt, SanPham sanPham) throws SQLException {
+		pstmt.setString(1, sanPham.getMaSP());
+		pstmt.setString(2, sanPham.getTenSP());
+		pstmt.setString(3, sanPham.getDanhMuc().getMaDM());
+		pstmt.setDouble(4, sanPham.getGiaNhap());
+		pstmt.setDouble(5, sanPham.getGiaBan());
+		pstmt.setString(6, sanPham.getThuongHieu());
+		pstmt.setString(7, sanPham.getHinhAnh());
+	}
+
+	private String buildSearchQuery(String searchType) {
+		String baseQuery = "SELECT * FROM product WHERE status = 'active' AND ";
+
+		switch (searchType) {
+		case "Theo Mã":
+			return baseQuery + "productID LIKE ?";
+		case "Tên SP":
+			return baseQuery + "name LIKE ?";
+		case "Thương Hiệu":
+			return baseQuery + "brand LIKE ?";
+		default:
+			return baseQuery + "name LIKE ?";
+		}
+	}
+
+	private void closeResources() {
+		try {
+			if (rs != null)
+				rs.close();
+			if (pstmt != null)
+				pstmt.close();
+			if (conn != null)
+				conn.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+}

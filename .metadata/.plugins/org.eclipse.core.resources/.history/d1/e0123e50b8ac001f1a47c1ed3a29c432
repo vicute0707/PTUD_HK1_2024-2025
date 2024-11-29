@@ -1,0 +1,101 @@
+package bus;
+
+import dao.UserDAO;
+import entity.User;
+import java.util.List;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+public class UserBUS {
+    private UserDAO userDAO;
+
+    public UserBUS() {
+        userDAO = new UserDAO();
+    }
+
+    public List<User> getAllUsers() {
+        return userDAO.getAllUsers();
+    }
+
+    public boolean addUser(User user) throws Exception {
+        // Validate required fields
+        if (user.getUsername() == null || user.getUsername().trim().isEmpty()) {
+            throw new Exception("Username không được để trống");
+        }
+        if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+            throw new Exception("Password không được để trống");
+        }
+        if (user.getFullName() == null || user.getFullName().trim().isEmpty()) {
+            throw new Exception("Họ tên không được để trống");
+        }
+        
+        // Validate email format
+        if (user.getEmail() != null && !user.getEmail().isEmpty()) {
+            String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
+            if (!Pattern.compile(emailRegex).matcher(user.getEmail()).matches()) {
+                throw new Exception("Email không hợp lệ");
+            }
+        }
+        
+        // Validate phone format
+        if (user.getPhone() != null && !user.getPhone().isEmpty()) {
+            String phoneRegex = "^[0-9]{10}$";
+            if (!Pattern.compile(phoneRegex).matcher(user.getPhone()).matches()) {
+                throw new Exception("Số điện thoại không hợp lệ");
+            }
+        }
+        
+        // Check if username already exists
+        if (userDAO.isUsernameExists(user.getUsername())) {
+            throw new Exception("Username đã tồn tại");
+        }
+        
+        // Generate new userID if not provided
+        if (user.getUserID() == null || user.getUserID().trim().isEmpty()) {
+            user.setUserID(UUID.randomUUID().toString());
+        }
+        
+        // Set default status if not provided
+        if (user.getStatus() == null || user.getStatus().trim().isEmpty()) {
+            user.setStatus("active");
+        }
+        
+        return userDAO.addUser(user);
+    }
+
+    public boolean updateUser(User user) throws Exception {
+        // Validate required fields
+        if (user.getUserID() == null || user.getUserID().trim().isEmpty()) {
+            throw new Exception("User ID không được để trống");
+        }
+        if (user.getFullName() == null || user.getFullName().trim().isEmpty()) {
+            throw new Exception("Họ tên không được để trống");
+        }
+        
+        // Validate email format
+        if (user.getEmail() != null && !user.getEmail().isEmpty()) {
+            String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
+            if (!Pattern.compile(emailRegex).matcher(user.getEmail()).matches()) {
+                throw new Exception("Email không hợp lệ");
+            }
+        }
+        
+        // Validate phone format
+        if (user.getPhone() != null && !user.getPhone().isEmpty()) {
+            String phoneRegex = "^[0-9]{10}$";
+            if (!Pattern.compile(phoneRegex).matcher(user.getPhone()).matches()) {
+                throw new Exception("Số điện thoại không hợp lệ");
+            }
+        }
+        
+        return userDAO.updateUser(user);
+    }
+
+    public boolean deleteUser(String userID) throws Exception {
+        if (userID == null || userID.trim().isEmpty()) {
+            throw new Exception("User ID không được để trống");
+        }
+        
+        return userDAO.updateUserStatus(userID, "inactive");
+    }
+}

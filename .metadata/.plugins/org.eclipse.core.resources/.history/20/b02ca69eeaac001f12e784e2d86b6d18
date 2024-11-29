@@ -1,0 +1,145 @@
+package dao;
+
+import entity.UserRole;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.*;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+public class UserRoleDAO {
+	private MyConnection myConnection;
+	private Gson gson;
+
+	public UserRoleDAO() {
+		myConnection = new MyConnection();
+		gson = new Gson();
+	}
+
+	public List<UserRole> getAllRoles() {
+		List<UserRole> roles = new ArrayList<>();
+		String sql = "SELECT * FROM userrole";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			while (rs.next()) {
+				roles.add(parseRole(rs));
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return roles;
+	}
+
+	public UserRole getRoleById(String id) {
+		String sql = "SELECT * FROM userrole WHERE roleID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, id);
+			ResultSet rs = pst.executeQuery();
+
+			if (rs.next()) {
+				return parseRole(rs);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	public boolean addRole(UserRole role) {
+		String sql = "INSERT INTO userrole (roleID, roleName, permissions) VALUES (?, ?, ?)";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, role.getRoleID());
+			pst.setString(2, role.getRoleName());
+			pst.setString(3, gson.toJson(role.getPermissions()));
+
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	public boolean updateRole(UserRole role) {
+		String sql = "UPDATE userrole SET roleName = ?, permissions = ? WHERE roleID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, role.getRoleName());
+			pst.setString(2, gson.toJson(role.getPermissions()));
+			pst.setString(3, role.getRoleID());
+
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	public boolean deleteRole(String roleId) {
+		String sql = "DELETE FROM userrole WHERE roleID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, roleId);
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	public String getLastRoleId() {
+		String sql = "SELECT roleID FROM userrole ORDER BY CAST(SUBSTRING(roleID, 5) AS UNSIGNED) DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			if (rs.next()) {
+				return rs.getString("roleID");
+			}
+			return null;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	public boolean isRoleNameExists(String roleName) {
+		String sql = "SELECT COUNT(*) FROM userrole WHERE roleName = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, roleName);
+			ResultSet rs = pst.executeQuery();
+
+			if (rs.next()) {
+				return rs.getInt(1) > 0;
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
+
+	private UserRole parseRole(ResultSet rs) throws SQLException {
+		UserRole role = new UserRole();
+		role.setRoleID(rs.getString("roleID"));
+		role.setRoleName(rs.getString("roleName"));
+
+		String permissionsJson = rs.getString("permissions");
+		if (permissionsJson != null) {
+			TypeToken<List<String>> token = new TypeToken<List<String>>() {
+			};
+			role.setPermissions(gson.fromJson(permissionsJson, token.getType()));
+		}
+		return role;
+	}
+}

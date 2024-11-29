@@ -1,0 +1,1063 @@
+package gui;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.event.ActionListener;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.plaf.basic.BasicComboBoxUI;
+import javax.swing.plaf.basic.BasicComboPopup;
+import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.plaf.basic.ComboPopup;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+import javax.swing.table.TableModel;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+
+import bus.SanPhamBUS;
+import dialog.ChiTietSanPham;
+import dialog.EditSanPham;
+import dialog.ThemSanPham;
+
+import entity.NhaCC;
+import entity.SanPham;
+import entity.ThemSanPhamTam;
+import gui.Form_NhaCungCap.TimNhaCungCap;
+import service.PermissionChecker;
+
+public class Form_SanPham extends JPanel {
+
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color CONTENT_COLOR = new Color(255, 192, 203);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+	private int selectedRow = -1; // Thêm biến để lưu hàng được chọn
+	private ThemSanPhamTam tam = new ThemSanPhamTam();
+	private JTable table;
+	private DefaultTableModel tableModel;
+	private JTextField searchField;
+
+	private JComboBox<String> filterCombo;
+	private JButton addButton, editButton, deleteButton, infoButton, exportButton;
+
+	// Business Logic
+	private final SanPhamBUS sanPhamBUS;
+	private final String currentUserId;
+
+	public Form_SanPham(String userId) {
+		this.currentUserId = userId;
+		this.sanPhamBUS = new SanPhamBUS();
+		this.tam = new ThemSanPhamTam();
+
+		// Check if user can access this module
+		if (!PermissionChecker.canAccessModule(userId, PermissionChecker.MODULE_PRODUCT)) {
+			showAccessDeniedMessage();
+			return;
+		}
+
+		initComponents();
+		setupPermissions();
+		loadData();
+	}
+
+	private void showAccessDeniedMessage() {
+		JOptionPane.showMessageDialog(this, "Bạn không có quyền truy cập module Quản lý sản phẩm!", "Từ chối truy cập",
+				JOptionPane.WARNING_MESSAGE);
+		setEnabled(false);
+	}
+
+	private void setupPermissions() {
+		// Check individual permissions for actions
+		boolean canAdd = PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_ADD);
+		boolean canEdit = PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_EDIT);
+		boolean canDelete = PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_DELETE);
+		boolean canExport = PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT, "EXPORT");
+		boolean canView = PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_VIEW);
+
+		// Update button states and tooltips
+		updateButtonState(addButton, canAdd, "thêm");
+		updateButtonState(editButton, canEdit, "sửa");
+		updateButtonState(deleteButton, canDelete, "xóa");
+		updateButtonState(exportButton, canExport, "xuất");
+
+		// If user can't view, disable the entire table
+		if (!canView) {
+			table.setEnabled(false);
+			searchField.setEnabled(false);
+			filterCombo.setEnabled(false);
+		}
+	}
+
+	private void updateButtonState(JButton button, boolean hasPermission, String action) {
+		button.setEnabled(hasPermission);
+		if (!hasPermission) {
+			button.setToolTipText("Bạn không có quyền " + action + " sản phẩm");
+		}
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout(0, 20));
+		setBackground(Color.WHITE);
+		setBorder(new EmptyBorder(30, 30, 30, 30)); // Tăng padding cho toàn bộ form
+
+		// Top Panel
+		add(createTopPanel(), BorderLayout.NORTH);
+
+		// Table Panel
+		add(createTablePanel(), BorderLayout.CENTER);
+	}
+
+	private JPanel createTopPanel() {
+		JPanel topPanel = new JPanel(new BorderLayout(20, 0));
+		topPanel.setBackground(Color.WHITE);
+		topPanel.setBorder(new EmptyBorder(0, 0, 20, 0));
+
+		// Left components
+		JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+		leftPanel.setBackground(Color.WHITE);
+
+		// Custom ComboBox
+		JComboBox<String> filterCombo = new JComboBox<>(new String[] { "Theo Mã", "Tên SP", "Tên DM", "Thương Hiệu" });
+		filterCombo.setPreferredSize(new Dimension(120, 35));
+		filterCombo.setFont(CONTENT_FONT);
+		filterCombo.setBorder(BorderFactory.createEmptyBorder());
+		filterCombo.setBackground(Color.WHITE);
+
+		filterCombo.setUI(new BasicComboBoxUI() {
+			@Override
+			protected void installDefaults() {
+				super.installDefaults();
+				LookAndFeel.installProperty(comboBox, "opaque", false);
+			}
+
+			@Override
+			protected JButton createArrowButton() {
+				JButton button = new JButton();
+				button.setBorder(BorderFactory.createEmptyBorder());
+				button.setContentAreaFilled(false);
+				button.setIcon(new ImageIcon(getClass().getResource("/icon/arrow-down.png")));
+				return button;
+			}
+
+			@Override
+			protected ComboPopup createPopup() {
+				return new BasicComboPopup(comboBox) {
+					@Override
+					protected void configurePopup() {
+						super.configurePopup();
+						setBorder(new LineBorder(Color.LIGHT_GRAY, 1));
+					}
+
+					@Override
+					protected void configureList() {
+						super.configureList();
+						list.setSelectionBackground(HOVER_COLOR);
+						list.setSelectionForeground(Color.BLACK);
+					}
+				};
+			}
+		});
+
+		searchField = new JTextField();
+		searchField.setPreferredSize(new Dimension(220, 35));
+		searchField.setFont(CONTENT_FONT);
+
+		JButton searchButton = createRoundedButton("", "/icon/search.png", false);
+
+		leftPanel.add(filterCombo);
+		leftPanel.add(searchField);
+		leftPanel.add(searchButton);
+		searchButton.addActionListener(e -> {
+			String selectedFilter = (String) filterCombo.getSelectedItem(); // Lấy lựa chọn từ combobox
+			String keyword = searchField.getText().trim(); // Lấy từ khóa tìm kiếm
+
+			if (keyword.isEmpty()) {
+				JOptionPane.showMessageDialog(this, "Vui lòng nhập từ khóa tìm kiếm!", "Thông báo",
+						JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+
+		});
+
+		// Right components
+		JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+		rightPanel.setBackground(Color.WHITE);
+
+		JButton addButton = createRoundedButton("Thêm sản phẩm", "/icon/circle-plus.png", true);
+		addButton.setBackground(PRIMARY_COLOR);
+		addButton.setForeground(Color.WHITE);
+
+		JButton editButton = createRoundedButton("Edit", "/icon/pencil.png", true);
+		JButton deleteButton = createRoundedButton("Xóa", "/icon/trash.png", true);
+		JButton infoButton = createRoundedButton("About", "/icon/info.png", true);
+		JButton exportButton = createRoundedButton("Xuất Excel", "/icon/printer.png", true);
+
+		exportButton.addActionListener(e -> {
+			JFileChooser fileChooser = new JFileChooser();
+			fileChooser.setDialogTitle("Chọn vị trí lưu file"); // Tiêu đề hộp thoại
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY); // Chỉ chọn file
+
+			// Đặt tên file mặc định và phần mở rộng
+			fileChooser.setSelectedFile(new File("DanhSachSanPham.xlsx"));
+
+			// Mở hộp thoại chọn file
+			int userSelection = fileChooser.showSaveDialog(null);
+
+			if (userSelection == JFileChooser.APPROVE_OPTION) {
+				// Lấy đường dẫn file được chọn
+				File fileToSave = fileChooser.getSelectedFile();
+
+				// Kiểm tra và thêm phần mở rộng .html nếu người dùng không nhập
+				String filePath = fileToSave.getAbsolutePath();
+				if (!filePath.endsWith(".xlsx")) {
+					filePath += ".xlsx";
+				}
+
+				// Gọi phương thức xuất file
+				exportToHTMLWithFont(table, filePath);
+			}
+		});
+
+		deleteButton.addActionListener(e -> {
+			selectedRow = table.getSelectedRow();
+			if (selectedRow == -1) {
+				JOptionPane.showMessageDialog(Form_SanPham.this, "Vui lòng chọn một danh mục để xóa.", "Thông báo",
+						JOptionPane.WARNING_MESSAGE);
+			} else {
+				int confirm = JOptionPane.showConfirmDialog(Form_SanPham.this, "Bạn có chắc muốn xóa sản phẩm này?",
+						"Xác nhận xóa", JOptionPane.YES_NO_OPTION);
+
+				if (confirm == JOptionPane.YES_OPTION) {
+					String maSP = (String) tableModel.getValueAt(selectedRow, 0);
+
+				}
+			}
+		});
+
+		rightPanel.add(addButton);
+		addButton.setPreferredSize(new Dimension(160, 38));
+		addButton.addActionListener(e -> {
+			ThemSanPham dialog = new ThemSanPham((Frame) SwingUtilities.getWindowAncestor(Form_SanPham.this));
+			dialog.setVisible(true);
+
+			if (dialog.isConfirmed()) {
+				// Xử lý thêm sản phẩm mới vào table
+				Object[] rowData = { "PRD" + (tableModel.getRowCount() + 1), dialog.getTenSP(), dialog.getDanhMuc(),
+						dialog.getTonKho(), dialog.getGiaNhap(), dialog.getGiaBan(), dialog.getThuongHieu(),
+						"Còn hàng" };
+				tableModel.addRow(rowData);
+			}
+		});
+		rightPanel.add(editButton);
+		editButton.addActionListener(e -> {
+			selectedRow = table.getSelectedRow();
+			if (selectedRow == -1) {
+				// Không có hàng nào được chọn
+				JOptionPane.showMessageDialog(Form_SanPham.this, "Vui lòng chọn một sản phẩm để chỉnh sửa.",
+						"Thông báo", JOptionPane.WARNING_MESSAGE);
+			} else {
+				// Mở hộp thoại chỉnh sửa với hàng đã chọn
+				EditSanPham dialog = new EditSanPham((Frame) SwingUtilities.getWindowAncestor(Form_SanPham.this),
+						tableModel, selectedRow);
+				dialog.setVisible(true);
+			}
+		});
+		rightPanel.add(deleteButton);
+		rightPanel.add(infoButton);
+		infoButton.addActionListener(e -> {
+			selectedRow = table.getSelectedRow();
+
+			if (selectedRow == -1) {
+				// Không có hàng nào được chọn
+				JOptionPane.showMessageDialog(Form_SanPham.this, "Vui lòng chọn một sản phẩm để xem chi tiết.",
+						"Thông báo", JOptionPane.WARNING_MESSAGE);
+			} else {
+				// Mở hộp thoại chỉnh sửa với hàng đã chọn
+				ChiTietSanPham dialog = new ChiTietSanPham((Frame) SwingUtilities.getWindowAncestor(Form_SanPham.this),
+						tableModel, selectedRow);
+				dialog.setVisible(true);
+			}
+		});
+		rightPanel.add(exportButton);
+		exportButton.setPreferredSize(new Dimension(160, 38));
+
+		topPanel.add(leftPanel, BorderLayout.WEST);
+		topPanel.add(rightPanel, BorderLayout.EAST);
+
+		return topPanel;
+	}
+
+	private JPanel createButtonPanel() {
+		JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+		rightPanel.setBackground(Color.WHITE);
+
+		// Khởi tạo các nút với icon và style
+		addButton = createActionButton("Thêm sản phẩm", "/icon/circle-plus.png", true, e -> {
+			handleAdd();
+		});
+		editButton = createActionButton("Sửa", "/icon/pencil.png", true, e -> {
+			handleEdit();
+		});
+		deleteButton = createActionButton("Xóa", "/icon/trash.png", true, e -> {
+			handleDelete();
+		});
+		infoButton = createActionButton("Chi tiết", "/icon/info.png", true, e -> {
+			handleAbout();
+		});
+		exportButton = createActionButton("Xuất Excel", "/icon/printer.png", true, e -> {
+			handleExport();
+		});
+
+		// Thiết lập style đặc biệt cho nút thêm
+		addButton.setBackground(PRIMARY_COLOR);
+		addButton.setForeground(Color.WHITE);
+		addButton.setPreferredSize(new Dimension(160, 38));
+		exportButton.setPreferredSize(new Dimension(160, 38));
+
+		// Thêm các nút vào panel
+		rightPanel.add(addButton);
+		rightPanel.add(editButton);
+		rightPanel.add(deleteButton);
+		rightPanel.add(infoButton);
+		rightPanel.add(exportButton);
+
+		return rightPanel;
+	}
+
+	private void handleExport() {
+		if (!PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT, "EXPORT")) {
+			JOptionPane.showMessageDialog(this, "Bạn không có quyền xuất dữ liệu sản phẩm!", "Từ chối truy cập",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setDialogTitle("Chọn vị trí lưu file");
+		fileChooser.setSelectedFile(new File("DanhSachSanPham.xlsx"));
+
+		if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+			String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+			if (!filePath.endsWith(".xlsx")) {
+				filePath += ".xlsx";
+			}
+			exportToExcel(table, filePath);
+		}
+	}
+
+	private void exportToExcel(JTable table, String filePath) {
+		try {
+			// Excel export logic here
+			JOptionPane.showMessageDialog(this, "Xuất file Excel thành công!", "Thông báo",
+					JOptionPane.INFORMATION_MESSAGE);
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi xuất file: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			e.printStackTrace();
+		}
+	}
+
+	private void handleDelete() {
+		if (!PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_DELETE)) {
+			JOptionPane.showMessageDialog(this, "Bạn không có quyền xóa sản phẩm!", "Từ chối truy cập",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		selectedRow = table.getSelectedRow();
+		if (selectedRow == -1) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn một sản phẩm để xóa.", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		int confirm = JOptionPane.showConfirmDialog(this, "Bạn có chắc muốn xóa sản phẩm này?", "Xác nhận xóa",
+				JOptionPane.YES_NO_OPTION);
+
+		if (confirm == JOptionPane.YES_OPTION) {
+			String maSP = (String) tableModel.getValueAt(selectedRow, 0);
+			// Delete product logic here
+			loadData(); // Refresh table after deleting
+		}
+	}
+
+	private void handleEdit() {
+		if (!PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_EDIT)) {
+			JOptionPane.showMessageDialog(this, "Bạn không có quyền sửa sản phẩm!", "Từ chối truy cập",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		selectedRow = table.getSelectedRow();
+		if (selectedRow == -1) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn một sản phẩm để chỉnh sửa.", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		EditSanPham dialog = new EditSanPham((Frame) SwingUtilities.getWindowAncestor(this), tableModel, selectedRow);
+		dialog.setVisible(true);
+		if (dialog.isConfirmed()) {
+			loadData(); // Refresh table after editing
+		}
+	}
+
+	private void handleAdd() {
+		if (!PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_ADD)) {
+			JOptionPane.showMessageDialog(this, "Bạn không có quyền thêm sản phẩm!", "Từ chối truy cập",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		ThemSanPham dialog = new ThemSanPham((Frame) SwingUtilities.getWindowAncestor(this));
+		dialog.setVisible(true);
+
+		if (dialog.isConfirmed()) {
+			// Add new product logic here
+			loadData(); // Refresh table after adding
+		}
+	}
+
+	private JButton createActionButton(String text, String iconPath, boolean enablePadding, ActionListener action) {
+		// Create the base button with text
+		JButton button = new JButton(text);
+		button.setFont(CONTENT_FONT);
+
+		// Add icon if provided
+		if (iconPath != null && !iconPath.isEmpty()) {
+			// Load and set the icon, maintaining a consistent size
+			ImageIcon icon = new ImageIcon(getClass().getResource(iconPath));
+			Image img = icon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH);
+			button.setIcon(new ImageIcon(img));
+
+			// Add some spacing between icon and text
+			button.setIconTextGap(8);
+		}
+
+		// Configure button appearance
+		if (enablePadding) {
+			// Add rounded borders with a light gray outline
+			button.setBorder(new LineBorder(new Color(230, 230, 230), 1, true));
+
+			// Set consistent padding for better visual appearance
+			button.setMargin(new Insets(8, 16, 8, 16));
+		} else {
+			button.setBorder(BorderFactory.createEmptyBorder());
+		}
+
+		// Set button properties
+		button.setFocusPainted(false); // Remove focus ring
+		button.setBackground(Color.WHITE);
+		button.setForeground(Color.BLACK);
+
+		// Calculate preferred size based on content
+		int width = text.isEmpty() ? 38 : 130; // Adjust width based on whether there's text
+		button.setPreferredSize(new Dimension(width, 38));
+
+		// Add hover effects using a MouseAdapter
+		button.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				if (button.isEnabled()) {
+					// Special handling for primary action buttons (those with white text)
+					if (button.getForeground().equals(Color.WHITE)) {
+						// Lighten the primary color for hover
+						button.setBackground(PRIMARY_COLOR.brighter());
+					} else {
+						button.setBackground(HOVER_COLOR);
+					}
+					// Show hand cursor on hover
+					button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+				}
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				if (button.isEnabled()) {
+					// Restore original colors
+					if (button.getForeground().equals(Color.WHITE)) {
+						button.setBackground(PRIMARY_COLOR);
+					} else {
+						button.setBackground(Color.WHITE);
+					}
+					// Restore default cursor
+					button.setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
+				}
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (button.isEnabled()) {
+					// Darken the button slightly when pressed
+					button.setBackground(button.getBackground().darker());
+				}
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (button.isEnabled()) {
+					// Restore hover color
+					mouseEntered(e);
+				}
+			}
+		});
+
+		// Add the action listener if provided
+		if (action != null) {
+			button.addActionListener(action);
+		}
+
+		// Add focus listener for keyboard navigation
+		button.addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				if (button.isEnabled()) {
+					button.setBackground(HOVER_COLOR);
+				}
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (button.isEnabled()) {
+					if (button.getForeground().equals(Color.WHITE)) {
+						button.setBackground(PRIMARY_COLOR);
+					} else {
+						button.setBackground(Color.WHITE);
+					}
+				}
+			}
+		});
+
+		return button;
+	}
+
+	private JPanel createTablePanel() {
+		JPanel tablePanel = new JPanel(new BorderLayout(0, 15));
+		tablePanel.setBackground(Color.WHITE);
+		tablePanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+
+		String[] columns = { "Mã SP", "Tên sản phẩm", "Danh mục", "Số lượng tồn", "Giá nhập", "Giá bán", "Thương hiệu",
+				"Tình trạng" };
+		tableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		table = new JTable(tableModel);
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(32);
+		table.setGridColor(new Color(245, 245, 245));
+		table.setSelectionBackground(HOVER_COLOR);
+		table.setSelectionForeground(Color.BLACK);
+		table.setIntercellSpacing(new Dimension(10, 10));
+
+		// Set preferred size for auto scrolling
+		table.setPreferredScrollableViewportSize(new Dimension(800, 400));
+		table.setFillsViewportHeight(true);
+
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				// Get the selected row index
+				selectedRow = table.getSelectedRow();
+				if (selectedRow != -1) {
+					if (e.getClickCount() == 2) {
+						// Create and show edit dialog
+						EditSanPham dialog = new EditSanPham(
+								(Frame) SwingUtilities.getWindowAncestor(Form_SanPham.this), tableModel, selectedRow);
+						dialog.setVisible(true);
+
+					}
+				}
+			}
+		});
+
+		// Setup table headerCustomScrollBarUI
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+		header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 230)));
+
+		// Add sample data
+
+		// Create scroll pane with custom ScrollBarUI
+		JScrollPane scrollPane = new JScrollPane(table);
+		String masp = "PRD" + String.format("%03d", tableModel.getRowCount() + 1);
+		tam.setMaSP(masp);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+		scrollPane.setBackground(Color.white);
+		scrollPane.setBorder(BorderFactory.createCompoundBorder(new EmptyBorder(10, 10, 10, 10),
+				BorderFactory.createLineBorder(new Color(245, 245, 245))));
+
+		// Customize scroll bars
+		scrollPane.getVerticalScrollBar().setUI(new CustomScrollBarUI());
+		scrollPane.getHorizontalScrollBar().setUI(new CustomScrollBarUI());
+
+		// Set scroll bar policies
+		scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+		tablePanel.add(scrollPane, BorderLayout.CENTER);
+
+		return tablePanel;
+	}
+
+	private class CustomScrollBarUI extends BasicScrollBarUI {
+		@Override
+		protected void configureScrollBarColors() {
+			this.thumbColor = CONTENT_COLOR;
+			this.trackColor = Color.WHITE;
+		}
+
+		@Override
+		protected JButton createDecreaseButton(int orientation) {
+			return createZeroButton();
+		}
+
+		@Override
+		protected JButton createIncreaseButton(int orientation) {
+			return createZeroButton();
+		}
+
+		@Override
+		protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
+			Graphics2D g2 = (Graphics2D) g.create();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			g2.setPaint(thumbColor);
+			g2.fillRoundRect(thumbBounds.x, thumbBounds.y, thumbBounds.width, thumbBounds.height, 10, 10); // Bo tròn
+																											// góc
+			g2.dispose();
+		}
+
+		@Override
+		protected void paintTrack(Graphics g, JComponent c, Rectangle trackBounds) {
+			Graphics2D g2 = (Graphics2D) g.create();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			g2.setPaint(trackColor);
+			g2.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+			g2.dispose();
+		}
+
+		private JButton createZeroButton() {
+			JButton button = new JButton();
+			button.setPreferredSize(new Dimension(0, 0));
+			button.setMinimumSize(new Dimension(0, 0));
+			button.setMaximumSize(new Dimension(0, 0));
+			return button;
+		}
+	}
+
+	private JButton createRoundedButton(String text, String iconPath, boolean isRounded) {
+		JButton button = new JButton(text);
+		button.setFont(CONTENT_FONT);
+		if (iconPath != null && !iconPath.isEmpty()) {
+			button.setIcon(new ImageIcon(getClass().getResource(iconPath)));
+		}
+
+		if (isRounded) {
+			button.setBorder(new LineBorder(new Color(230, 230, 230), 1, true));
+		} else {
+			button.setBorder(BorderFactory.createEmptyBorder());
+		}
+
+		button.setFocusPainted(false);
+		button.setBackground(Color.WHITE);
+		button.setPreferredSize(new Dimension(text.isEmpty() ? 38 : 130, 38));
+
+		// Add hover effect
+		button.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				button.setBackground(HOVER_COLOR);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				if (button.getForeground().equals(Color.WHITE)) {
+					button.setBackground(PRIMARY_COLOR);
+				} else {
+					button.setBackground(Color.WHITE);
+				}
+			}
+		});
+
+		return button;
+	}
+
+	// phương thức xuất file Excel
+	public void exportToHTMLWithFont(JTable table, String filePath) {
+		try (FileWriter htmlWriter = new FileWriter(filePath)) {
+			// Bắt đầu file HTML và thêm CSS cho kiểu chữ
+			htmlWriter.write("<html><head><meta charset='UTF-8'>\n");
+			htmlWriter.write("<style>\n");
+			htmlWriter.write("body { font-family: 'Times New Roman', serif; }\n"); // Thiết lập font Times New Roman
+			htmlWriter.write("table { border-collapse: collapse; width: 100%; }\n");
+			htmlWriter.write("th, td { border: 0.5px solid black; padding: 16px; text-align: left; }\n");
+			htmlWriter.write("th { background-color: #f2f2f2; }\n");
+			htmlWriter.write("</style>\n</head><body>\n");
+
+			// Bắt đầu bảng
+			htmlWriter.write("<table>\n");
+
+			// Lấy mô hình bảng
+			TableModel model = table.getModel();
+
+			// Tạo tiêu đề bảng (header)
+			htmlWriter.write("<tr>\n");
+			for (int col = 0; col < model.getColumnCount(); col++) {
+				htmlWriter.write("<th>" + model.getColumnName(col) + "</th>");
+			}
+			htmlWriter.write("</tr>\n");
+
+			// Ghi dữ liệu từng hàng
+			for (int row = 0; row < model.getRowCount(); row++) {
+				htmlWriter.write("<tr>\n");
+				for (int col = 0; col < model.getColumnCount(); col++) {
+					Object value = model.getValueAt(row, col);
+					if (value != null) {
+						htmlWriter.write("<td>" + value.toString() + "</td>");
+					} else {
+						htmlWriter.write("<td></td>");
+					}
+				}
+				htmlWriter.write("</tr>\n");
+			}
+
+			// Kết thúc bảng và file HTML
+			htmlWriter.write("</table>\n</body></html>");
+
+			JOptionPane.showMessageDialog(null, "Xuất file Excel thành công!", "Thông báo",
+					JOptionPane.INFORMATION_MESSAGE);
+		} catch (IOException e) {
+			JOptionPane.showMessageDialog(null, "Lỗi khi xuất file: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			e.printStackTrace();
+		}
+	}
+
+	private void loadData() {
+		// First, verify if the user has permission to view product data
+		if (!PermissionChecker.hasPermission(currentUserId, PermissionChecker.MODULE_PRODUCT,
+				PermissionChecker.ACTION_VIEW)) {
+			JOptionPane.showMessageDialog(this, "Bạn không có quyền xem dữ liệu sản phẩm!", "Từ chối truy cập",
+					JOptionPane.WARNING_MESSAGE);
+			table.setEnabled(false);
+			return;
+		}
+
+		try {
+			// Clear existing table data to prepare for new data
+			tableModel.setRowCount(0);
+
+			// Retrieve fresh data from the business logic layer
+			ArrayList<SanPham> danhSachSanPham = sanPhamBUS.getAllSanPham();
+
+			// Check if we have any data to display
+			if (danhSachSanPham == null || danhSachSanPham.isEmpty()) {
+				JOptionPane.showMessageDialog(this, "Không có dữ liệu sản phẩm nào!", "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+
+			// Populate the table with product data
+			for (SanPham sanPham : danhSachSanPham) {
+				// Create status text based on inventory level
+				String tinhTrang = getTinhTrangText(sanPham.getSoLuongTonKho());
+
+				// Format currency values for better readability
+				String giaNhap = String.format("%,d", sanPham.getGiaNhap());
+				String giaBan = String.format("%,d", sanPham.getGiaBan());
+
+				// Add a new row to the table with formatted data
+				Object[] rowData = { sanPham.getMaSP(), sanPham.getTenSP(), sanPham.getDanhmuc().getTenDM(),
+						sanPham.getSoLuongTonKho(), giaNhap, giaBan, sanPham.getThuongHieu(), tinhTrang };
+				tableModel.addRow(rowData);
+			}
+
+			// Apply custom rendering for the status column
+			setupStatusColumnRenderer();
+
+			// Automatically adjust column widths for better visibility
+			adjustColumnWidths();
+
+			// Reset row selection
+			if (selectedRow >= 0 && selectedRow < table.getRowCount()) {
+				table.setRowSelectionInterval(selectedRow, selectedRow);
+			} else {
+				selectedRow = -1;
+			}
+
+		} catch (Exception e) {
+			// Log the error for debugging
+			e.printStackTrace();
+
+			// Show user-friendly error message
+			JOptionPane.showMessageDialog(this, "Đã xảy ra lỗi khi tải dữ liệu: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Helper method to determine product status based on inventory level
+	private String getTinhTrangText(int soLuongTon) {
+		if (soLuongTon <= 0) {
+			return "Hết hàng";
+		} else if (soLuongTon <= 10) {
+			return "Sắp hết";
+		} else {
+			return "Còn hàng";
+		}
+	}
+
+	// Helper method to setup custom rendering for the status column
+	private void setupStatusColumnRenderer() {
+		table.getColumnModel().getColumn(7).setCellRenderer((table, value, isSelected, hasFocus, row, column) -> {
+			JLabel label = new JLabel(value.toString());
+			label.setOpaque(true);
+			label.setHorizontalAlignment(JLabel.CENTER);
+			label.setFont(CONTENT_FONT);
+			label.setBorder(new EmptyBorder(0, 5, 0, 5));
+
+			// Set color based on status
+			switch (value.toString()) {
+			case "Còn hàng":
+				label.setForeground(new Color(0, 128, 0)); // Dark green
+				break;
+			case "Sắp hết":
+				label.setForeground(new Color(255, 140, 0)); // Orange
+				break;
+			case "Hết hàng":
+				label.setForeground(Color.RED);
+				break;
+			}
+
+			// Handle selection highlighting
+			if (isSelected) {
+				label.setBackground(HOVER_COLOR);
+			} else {
+				label.setBackground(table.getBackground());
+			}
+
+			return label;
+		});
+	}
+
+	// Helper method to adjust column widths based on content
+	private void adjustColumnWidths() {
+		for (int column = 0; column < table.getColumnCount(); column++) {
+			int maxWidth = 0;
+			TableColumn tableColumn = table.getColumnModel().getColumn(column);
+
+			// Check header width
+			TableCellRenderer headerRenderer = tableColumn.getHeaderRenderer();
+			if (headerRenderer == null) {
+				headerRenderer = table.getTableHeader().getDefaultRenderer();
+			}
+			Object headerValue = tableColumn.getHeaderValue();
+			Component headerComp = headerRenderer.getTableCellRendererComponent(table, headerValue, false, false, 0,
+					column);
+			maxWidth = Math.max(maxWidth, headerComp.getPreferredSize().width);
+
+			// Check data width
+			for (int row = 0; row < table.getRowCount(); row++) {
+				TableCellRenderer cellRenderer = table.getCellRenderer(row, column);
+				Component comp = table.prepareRenderer(cellRenderer, row, column);
+				maxWidth = Math.max(maxWidth, comp.getPreferredSize().width);
+			}
+
+			// Add padding
+			maxWidth += 20;
+
+			// Set the width
+			tableColumn.setPreferredWidth(maxWidth);
+		}
+	}
+
+	public class TimSanPham extends JDialog {
+		private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+		private static final Color CONTENT_COLOR = new Color(255, 192, 203);
+		private static final Color HOVER_COLOR = new Color(252, 231, 243);
+		private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+		private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+		private int selectedRow = -1; // Variable to hold the selected row index
+
+		private static final long serialVersionUID = 1L;
+		private final JPanel contentPanel = new JPanel();
+		private TableModel tableModel;
+		private JTable table;
+
+		/**
+		 * Launch the application.
+		 */
+
+		/**
+		 * Create the dialog.
+		 */
+		public TimSanPham() {
+			setTitle("Tìm Sản Phẩm");
+			setBounds(100, 100, 800, 400);
+			getContentPane().setLayout(new BorderLayout());
+
+			contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+			getContentPane().add(contentPanel, BorderLayout.CENTER);
+			contentPanel.setLayout(new BorderLayout(0, 0));
+
+			contentPanel.add(createTablePanel(), BorderLayout.CENTER);
+
+			// Optional: Add a button panel (for example, a Close button)
+			JPanel buttonPanel = new JPanel();
+			contentPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+			JButton closeButton = new JButton("Close");
+			closeButton.addActionListener(e -> dispose());
+			buttonPanel.add(closeButton);
+		}
+
+		private JPanel createTablePanel() {
+			JPanel tablePanel = new JPanel(new BorderLayout(0, 15));
+			tablePanel.setBackground(Color.WHITE);
+			tablePanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+
+			String[] columns = { "Mã SP", "Tên sản phẩm", "Danh mục", "Số lượng tồn", "Giá nhập", "Giá bán",
+					"Thương hiệu", "Tình trạng" };
+			tableModel = new DefaultTableModel(columns, 0) {
+				@Override
+				public boolean isCellEditable(int row, int column) {
+					return false; // All columns are non-editable
+				}
+			};
+
+			table = new JTable(tableModel);
+			table.setFont(CONTENT_FONT);
+			table.setRowHeight(32);
+			table.setGridColor(new Color(245, 245, 245));
+			table.setSelectionBackground(HOVER_COLOR);
+			table.setSelectionForeground(Color.BLACK);
+			table.setIntercellSpacing(new Dimension(10, 10));
+
+			// Set preferred size for auto scrolling
+			table.setPreferredScrollableViewportSize(new Dimension(800, 400));
+			table.setFillsViewportHeight(true);
+
+			table.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mouseClicked(MouseEvent e) {
+
+				}
+			});
+
+			// Setup table header
+			JTableHeader header = table.getTableHeader();
+			header.setFont(HEADER_FONT);
+			header.setBackground(Color.WHITE);
+			header.setForeground(Color.BLACK);
+			header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+			header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 230)));
+
+			// Create scroll pane with custom ScrollBarUI
+			JScrollPane scrollPane = new JScrollPane(table);
+			scrollPane.getViewport().setBackground(Color.WHITE);
+			scrollPane.setBackground(Color.white);
+			scrollPane.setBorder(BorderFactory.createCompoundBorder(new EmptyBorder(10, 10, 10, 10),
+					BorderFactory.createLineBorder(new Color(245, 245, 245))));
+
+			// Customize scroll bars
+			scrollPane.getVerticalScrollBar().setUI(new CustomScrollBarUI());
+			scrollPane.getHorizontalScrollBar().setUI(new CustomScrollBarUI());
+
+			// Set scroll bar policies
+			scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+			scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+			tablePanel.add(scrollPane, BorderLayout.CENTER);
+
+			return tablePanel;
+		}
+
+		public void hienThiKetQuaTimkiem(ArrayList<SanPham> danhsachSanPham) {
+			// Xóa dữ liệu cũ trong bảng
+			((DefaultTableModel) tableModel).setRowCount(0);
+
+			for (SanPham s : danhsachSanPham) {
+				String[] row = { s.getMaSP(), s.getTenSP(), s.getDanhmuc().getTenDM(),
+						String.valueOf(s.getSoLuongTonKho()), // Chuyển đổi sang String
+						String.valueOf(s.getGiaNhap()), // Chuyển đổi sang String
+						String.valueOf(s.getGiaBan()), // Chuyển đổi sang String
+						s.getThuongHieu(), s.getTinhtrang() };
+				((DefaultTableModel) tableModel).addRow(row);
+			}
+			// Set custom cell renderer for status column
+			table.getColumnModel().getColumn(7).setCellRenderer((table, value, isSelected, hasFocus, row, column) -> {
+				JLabel label = new JLabel(value.toString());
+				label.setOpaque(true);
+				label.setHorizontalAlignment(JLabel.CENTER);
+				label.setFont(CONTENT_FONT);
+				label.setBorder(new EmptyBorder(0, 5, 0, 5)); // Thêm padding cho cell
+
+				switch (value.toString()) {
+				case "Còn hàng":
+					label.setForeground(new Color(0, 128, 0));
+					break;
+				case "Sắp hết":
+					label.setForeground(new Color(255, 140, 0));
+					break;
+				case "Hết hàng":
+					label.setForeground(Color.RED);
+					break;
+				}
+
+				if (isSelected) {
+					label.setBackground(HOVER_COLOR);
+				} else {
+					label.setBackground(table.getBackground());
+				}
+
+				return label;
+			});
+
+		}
+
+		// Custom ScrollBar UI for better styling
+		private class CustomScrollBarUI extends BasicScrollBarUI {
+			@Override
+			protected void configureScrollBarColors() {
+				this.thumbColor = CONTENT_COLOR;
+				this.trackColor = Color.WHITE;
+			}
+		}
+	}
+
+}

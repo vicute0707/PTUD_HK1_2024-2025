@@ -1,0 +1,205 @@
+package utils;
+
+import entity.UserRole;
+import entity.UserSession;
+import dao.UserRoleDAO;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class PermissionUtils {
+	// Constants for permissions - matching database values
+	public static final String NGUOIDUNG = "Quản lý người dùng";
+	public static final String SANPHAM = "Quản lý sản phẩm";
+	public static final String KHO = "Quản lý kho";
+	public static final String BANHANG = "Quản lý bán hàng";
+	public static final String NHAPHANG = "Quản lý nhập hàng";
+	public static final String BAOCAO = "Quản lý báo cáo";
+	public static final String PHANQUYEN = "Quản lý phân quyền";
+
+	private static UserRoleDAO userRoleDAO = new UserRoleDAO();
+
+	/**
+	 * Chuyển đổi danh sách quyền thành chuỗi JSON để lưu vào database Ví dụ: ["Quản
+	 * lý người dùng", "Quản lý sản phẩm"] -> JSON string
+	 */
+	public static String convertPermissionsToJson(List<String> permissions) {
+		if (permissions == null || permissions.isEmpty()) {
+			return "[]";
+		}
+
+		StringBuilder json = new StringBuilder("[");
+		for (int i = 0; i < permissions.size(); i++) {
+			if (i > 0) {
+				json.append(",");
+			}
+			json.append("\"").append(permissions.get(i)).append("\"");
+		}
+		json.append("]");
+		return json.toString();
+	}
+
+	/**
+	 * Chuyển đổi chuỗi JSON từ database thành danh sách quyền Ví dụ: JSON string ->
+	 * List of permission strings
+	 */
+	public static List<String> parsePermissionsFromJson(String jsonPermissions) {
+		if (jsonPermissions == null || jsonPermissions.isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		// Remove brackets and quotes, then split by comma
+		String cleaned = jsonPermissions.replace("[", "").replace("]", "").replace("\"", "").trim();
+
+		if (cleaned.isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		return Arrays.asList(cleaned.split(","));
+	}
+
+	/**
+	 * Kiểm tra xem người dùng có quyền cụ thể không
+	 * 
+	 * @param userId     ID của người dùng
+	 * @param permission Tên quyền cần kiểm tra
+	 * @return true nếu có quyền, false nếu không
+	 */
+	public static boolean hasPermission(String userId, String permission) {
+		try {
+			UserRole userRole = userRoleDAO.getRoleByID(userId);
+			if (userRole == null)
+				return false;
+
+			List<String> permissions = parsePermissionsFromJson(userRole.getPermissions());
+			return permissions.contains(permission);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Kiểm tra nhiều quyền cùng lúc
+	 * 
+	 * @param userId      ID của người dùng
+	 * @param permissions Danh sách quyền cần kiểm tra
+	 * @return true nếu có tất cả các quyền, false nếu thiếu bất kỳ quyền nào
+	 */
+	public static boolean hasAllPermissions(String userId, String... permissions) {
+		for (String permission : permissions) {
+			if (!hasPermission(userId, permission)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Lấy danh sách tất cả quyền của người dùng
+	 * 
+	 * @param userId ID của người dùng
+	 * @return List các quyền của người dùng
+	 */
+	public static List<String> getUserPermissions(String userId) {
+		try {
+			UserRole userRole = userRoleDAO.getRoleByID(userId);
+			if (userRole == null) {
+				return new ArrayList<>();
+			}
+			return parsePermissionsFromJson(userRole.getPermissions());
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ArrayList<>();
+		}
+	}
+
+	/**
+	 * Cập nhật quyền cho một vai trò
+	 * 
+	 * @param roleId      ID của vai trò
+	 * @param permissions Danh sách quyền mới
+	 * @return true nếu cập nhật thành công, false nếu thất bại
+	 */
+	public static boolean updateRolePermissions(String roleId, List<String> permissions) {
+		try {
+			UserRole role = userRoleDAO.getRoleById(roleId);
+			if (role == null) {
+				return false;
+			}
+
+			String jsonPermissions = convertPermissionsToJson(permissions);
+			role.setPermissions(jsonPermissions);
+
+			return userRoleDAO.updateRole(role);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/**
+	 * Kiểm tra và vô hiệu hóa các button dựa trên quyền
+	 * 
+	 * @param userId     ID của người dùng
+	 * @param buttonText Text của button
+	 * @return true nếu nên enable button, false nếu không
+	 */
+	public static boolean shouldEnableButton(String userId, String buttonText) {
+		// Map button text to required permissions
+		switch (buttonText.toLowerCase()) {
+		case "thêm người dùng":
+		case "sửa người dùng":
+		case "xóa người dùng":
+			return hasPermission(userId, NGUOIDUNG);
+
+		case "thêm sản phẩm":
+		case "sửa sản phẩm":
+		case "xóa sản phẩm":
+			return hasPermission(userId, SANPHAM);
+
+		case "nhập hàng":
+		case "xuất hàng":
+			return hasPermission(userId, KHO);
+
+		case "thêm đơn hàng":
+		case "sửa đơn hàng":
+		case "xóa đơn hàng":
+			return hasPermission(userId, BANHANG);
+
+		case "xuất báo cáo":
+		case "xem báo cáo":
+			return hasPermission(userId, BAOCAO);
+
+		case "phân quyền":
+		case "quản lý quyền":
+			return hasPermission(userId, PHANQUYEN);
+
+		default:
+			return false;
+		}
+	}
+
+	/**
+	 * Lấy tooltip message khi button bị vô hiệu hóa
+	 * 
+	 * @param permission Tên quyền
+	 * @return Message hiển thị trong tooltip
+	 */
+	public static String getPermissionDeniedMessage(String permission) {
+		return "Bạn không có quyền " + permission.toLowerCase();
+	}
+
+	/**
+	 * Kiểm tra xem một chuỗi JSON có hợp lệ không
+	 * 
+	 * @param jsonString Chuỗi JSON cần kiểm tra
+	 * @return true nếu hợp lệ, false nếu không
+	 */
+	public static boolean isValidJsonPermissions(String jsonString) {
+		if (jsonString == null || jsonString.isEmpty()) {
+			return false;
+		}
+
+		return jsonString.startsWith("[") && jsonString.endsWith("]") && jsonString.contains("\"");
+	}

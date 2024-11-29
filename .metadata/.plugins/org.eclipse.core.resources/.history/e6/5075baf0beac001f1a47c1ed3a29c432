@@ -1,0 +1,14 @@
+package style;
+
+
+import java.awt.Color;
+import java.awt.Font;
+
+public class UIConstants {
+    public static final Color CONTENT_COLOR = new Color(255, 192, 203);
+    public static final Color HOVER_COLOR = new Color(252, 231, 243);
+    public static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+    public static final Font HEADER_FONT = new Font("Arial", Font.BOLD, 12);
+    public static final Font CONTENT_FONT = new Font("Arial", Font.PLAIN, 12);
+    public static final Font TAB_FONT = new Font("Arial", Font.BOLD, 14);
+}

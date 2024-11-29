@@ -1,0 +1,63 @@
+package component;
+import javax.swing.*;
+import java.awt.*;
+
+
+public abstract class AbstractManagementTab extends JPanel {
+    protected JTable table;
+    protected TableRowSorter<TableModel> sorter;
+    protected SearchPanel searchPanel;
+    protected ButtonPanel buttonPanel;
+
+    public AbstractManagementTab(String title, String[] columns, Object[][] data) {
+        setLayout(new BorderLayout());
+        initializeComponents(title, columns, data);
+    }
+
+    protected void initializeComponents(String title, String[] columns, Object[][] data) {
+        // Initialize table
+        table = new JTable(new DefaultTableModel(data, columns));
+        configureTable();
+        
+        // Initialize panels
+        searchPanel = new SearchPanel(e -> handleSearch(searchPanel.getSearchText()));
+        buttonPanel = new ButtonPanel(
+            e -> handleAdd(),
+            e -> handleEdit(),
+            e -> handleDelete(),
+            e -> handleExport(),
+            e -> handleAbout()
+        );
+        
+        // Layout setup
+        add(searchPanel, BorderLayout.NORTH);
+        add(new JScrollPane(table), BorderLayout.CENTER);
+        add(buttonPanel, BorderLayout.SOUTH);
+    }
+
+    // Abstract methods to be implemented by subclasses
+    protected abstract void handleAdd();
+    protected abstract void handleEdit();
+    
+    // Common methods
+    protected void handleSearch(String searchText) {
+        SearchHandler.performSearch(table, searchText);
+    }
+    
+    protected void handleDelete() {
+        DeleteHandler.handleDelete(this, table);
+    }
+    
+    protected boolean isRowSelected() {
+        return table.getSelectedRow() != -1;
+    }
+    
+    protected Object[] getSelectedRowData() {
+        int row = table.getSelectedRow();
+        Object[] data = new Object[table.getColumnCount()];
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            data[i] = table.getValueAt(row, i);
+        }
+        return data;
+    }
+}

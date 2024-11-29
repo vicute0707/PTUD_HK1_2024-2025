@@ -1,0 +1,52 @@
+package bus;
+
+import dao.PermissionDAO;
+import entity.Permission;
+import java.util.List;
+import java.util.UUID;
+
+public class PermissionBUS {
+	private PermissionDAO permissionDAO;
+
+	public PermissionBUS() {
+		permissionDAO = new PermissionDAO();
+	}
+
+	public List<Permission> getAllPermissions() {
+		return permissionDAO.getAllPermissions();
+	}
+
+	public boolean addPermission(Permission permission) throws Exception {
+		// Validate required fields
+		if (permission.getName() == null || permission.getName().trim().isEmpty()) {
+			throw new Exception("Tên quyền không được để trống");
+		}
+
+		// Generate new permissionID if not provided
+		if (permission.getPermissionID() == null || permission.getPermissionID().trim().isEmpty()) {
+			permission.setPermissionID(UUID.randomUUID().toString());
+		}
+
+		return permissionDAO.addPermission(permission);
+	}
+
+	public boolean updatePermission(Permission permission) throws Exception {
+		// Validate required fields
+		if (permission.getPermissionID() == null || permission.getPermissionID().trim().isEmpty()) {
+			throw new Exception("Permission ID không được để trống");
+		}
+		if (permission.getName() == null || permission.getName().trim().isEmpty()) {
+			throw new Exception("Tên quyền không được để trống");
+		}
+
+		return permissionDAO.updatePermission(permission);
+	}
+
+	public boolean deletePermission(String permissionID) throws Exception {
+		if (permissionID == null || permissionID.trim().isEmpty()) {
+			throw new Exception("Permission ID không được để trống");
+		}
+
+		return permissionDAO.deletePermission(permissionID);
+	}
+}

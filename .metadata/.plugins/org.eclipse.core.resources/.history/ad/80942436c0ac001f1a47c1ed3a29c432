@@ -1,0 +1,33 @@
+package component;
+
+import javax.swing.*;
+import javax.swing.table.*;
+import java.awt.*;
+
+public class AccountManagementPanel extends BaseManagementPanel {
+    public AccountManagementPanel() {
+        super("Tài khoản",
+              new String[]{"Mã NV", "Tên đăng nhập", "Nhóm quyền", "Trạng thái"},
+              createSampleData());
+    }
+
+    private static Object[][] createSampleData() {
+        return new Object[][] {
+            {"NV001", "admin", "Quản lí", "Đang hoạt động"},
+            {"NV002", "user", "Nhân viên", "Đang hoạt động"}
+        };
+    }
+
+    @Override
+    protected void handleAdd() {
+        JOptionPane.showMessageDialog(this, 
+            "Chức năng thêm tài khoản sẽ được thực hiện tại đây",
+            "Thêm tài khoản",
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    @Override
+    protected TableCellRenderer createCustomRenderer() {
+        return new StatusColumnRenderer();
+    }
+}

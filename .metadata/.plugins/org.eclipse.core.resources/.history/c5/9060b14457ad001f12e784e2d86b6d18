@@ -1,0 +1,90 @@
+package export;
+
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import javax.swing.*;
+import javax.swing.table.TableModel;
+import java.awt.Component;
+
+public class ExcelExporterNV {
+    // Định dạng ngày giờ cho tên file
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd-MM-yyyy_HH-mm-ss");
+
+    /**
+     * Xuất dữ liệu từ JTable sang file CSV để mở trong Excel
+     * @param table JTable chứa dữ liệu cần xuất
+     * @param title Tiêu đề của báo cáo
+     * @param parentComponent Component cha để hiển thị dialog
+     */
+    public static void exportToCSV(JTable table, String title, Component parentComponent) {
+        try {
+            // Tạo file chooser với tên file mặc định
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Chọn vị trí lưu file");
+            
+            // Tạo tên file mặc định với timestamp
+            String defaultFileName = title.toLowerCase().replace(" ", "_") + "_" + 
+                                   DATE_FORMAT.format(new Date()) + ".csv";
+            fileChooser.setSelectedFile(new File(defaultFileName));
+
+            // Hiển thị dialog chọn vị trí lưu file
+            if (fileChooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                // Thêm đuôi .csv nếu chưa có
+                if (!file.getName().toLowerCase().endsWith(".csv")) {
+                    file = new File(file.getAbsolutePath() + ".csv");
+                }
+
+                // Ghi dữ liệu vào file CSV với encoding UTF-8
+                try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(
+                        new FileOutputStream(file), "UTF-8"))) {
+                    
+                    // Ghi tiêu đề báo cáo
+                    writer.println("Báo cáo " + title);
+                    writer.println("Ngày xuất: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date()));
+                    writer.println(); // Dòng trống để phân cách
+                    
+                    TableModel model = table.getModel();
+                    
+                    // Ghi header của bảng
+                    StringBuilder header = new StringBuilder();
+                    for (int col = 0; col < model.getColumnCount(); col++) {
+                        if (col > 0) header.append(",");
+                        // Đưa tên cột vào trong dấu ngoặc kép để xử lý trường hợp có dấu phẩy
+                        header.append("\"").append(model.getColumnName(col)).append("\"");
+                    }
+                    writer.println(header.toString());
+
+                    // Ghi dữ liệu từng dòng
+                    for (int row = 0; row < model.getRowCount(); row++) {
+                        StringBuilder sb = new StringBuilder();
+                        for (int col = 0; col < model.getColumnCount(); col++) {
+                            if (col > 0) sb.append(",");
+                            Object value = model.getValueAt(row, col);
+                            // Đưa giá trị vào trong dấu ngoặc kép để xử lý trường hợp có dấu phẩy
+                            sb.append("\"").append(value != null ? value.toString() : "").append("\"");
+                        }
+                        writer.println(sb.toString());
+                    }
+
+                    // Hiển thị thông báo xuất file thành công
+                    JOptionPane.showMessageDialog(
+                        parentComponent,
+                        "Xuất file CSV thành công!\nVị trí: " + file.getAbsolutePath(),
+                        "Thành công",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        } catch (Exception e) {
+            // Xử lý lỗi và hiển thị thông báo cho người dùng
+            JOptionPane.showMessageDialog(
+                parentComponent,
+                "Lỗi khi xuất file: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+}

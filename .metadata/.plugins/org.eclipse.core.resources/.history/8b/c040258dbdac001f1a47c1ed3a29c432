@@ -1,0 +1,154 @@
+package component;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import javax.swing.border.*;
+
+
+public class ButtonPanel extends JPanel {
+    private JButton btnAdd;
+    private JButton btnEdit;
+    private JButton btnDelete;
+    private JButton btnExport;
+    private JButton btnRefresh;
+
+    public ButtonPanel(ActionListener addListener, 
+                      ActionListener editListener,
+                      ActionListener deleteListener,
+                      ActionListener exportListener,
+                      ActionListener refreshListener) {
+                          
+        initializePanel();
+        createButtons();
+        addListeners(addListener, editListener, deleteListener, exportListener, refreshListener);
+        styleButtons();
+        layoutButtons();
+    }
+
+    private void initializePanel() {
+        setLayout(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        setBackground(Color.WHITE);
+        setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    }
+
+    private void createButtons() {
+        btnAdd = createStyledButton("Thêm", "/images/add.png");
+        btnEdit = createStyledButton("Sửa", "/images/edit.png");
+        btnDelete = createStyledButton("Xóa", "/images/delete.png");
+        btnExport = createStyledButton("Xuất Excel", "/images/excel.png");
+        btnRefresh = createStyledButton("Làm mới", "/images/refresh.png");
+    }
+
+    private JButton createStyledButton(String text, String iconPath) {
+        JButton button = new JButton(text);
+        try {
+            ImageIcon icon = new ImageIcon(getClass().getResource(iconPath));
+            Image img = icon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH);
+            button.setIcon(new ImageIcon(img));
+        } catch (Exception e) {
+            System.out.println("Could not load icon: " + iconPath);
+        }
+        return button;
+    }
+
+    private void addListeners(ActionListener addListener, 
+                            ActionListener editListener,
+                            ActionListener deleteListener,
+                            ActionListener exportListener,
+                            ActionListener refreshListener) {
+        btnAdd.addActionListener(addListener);
+        btnEdit.addActionListener(editListener);
+        btnDelete.addActionListener(deleteListener);
+        btnExport.addActionListener(exportListener);
+        btnRefresh.addActionListener(refreshListener);
+
+        // Thêm hover effect
+        addHoverEffect(btnAdd);
+        addHoverEffect(btnEdit);
+        addHoverEffect(btnDelete);
+        addHoverEffect(btnExport);
+        addHoverEffect(btnRefresh);
+    }
+
+    private void addHoverEffect(JButton button) {
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(UIConstants.HOVER_COLOR);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(UIConstants.PRIMARY_COLOR);
+            }
+        });
+    }
+
+    private void styleButtons() {
+        JButton[] buttons = {btnAdd, btnEdit, btnDelete, btnExport, btnRefresh};
+        
+        for (JButton button : buttons) {
+            button.setFont(UIConstants.CONTENT_FONT);
+            button.setBackground(UIConstants.PRIMARY_COLOR);
+            button.setForeground(Color.WHITE);
+            button.setFocusPainted(false);
+            button.setBorderPainted(false);
+            button.setPreferredSize(new Dimension(120, 35));
+            button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            
+            // Add rounded corners
+            button.setBorder(new EmptyBorder(5, 15, 5, 15));
+            button.putClientProperty("JButton.buttonType", "roundRect");
+        }
+
+        // Specific styles for dangerous actions
+        btnDelete.setBackground(new Color(220, 53, 69));
+        btnDelete.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                btnDelete.setBackground(new Color(200, 35, 51));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                btnDelete.setBackground(new Color(220, 53, 69));
+            }
+        });
+    }
+
+    private void layoutButtons() {
+        // Add buttons with spacing
+        add(Box.createHorizontalStrut(10));
+        add(btnAdd);
+        add(Box.createHorizontalStrut(10));
+        add(btnEdit);
+        add(Box.createHorizontalStrut(10));
+        add(btnDelete);
+        add(Box.createHorizontalStrut(20)); // Larger gap before export
+        add(btnExport);
+        add(Box.createHorizontalStrut(10));
+        add(btnRefresh);
+    }
+
+    // Methods to enable/disable buttons
+    public void enableEditButtons(boolean enable) {
+        btnEdit.setEnabled(enable);
+        btnDelete.setEnabled(enable);
+    }
+
+    public void enableAllButtons(boolean enable) {
+        btnAdd.setEnabled(enable);
+        btnEdit.setEnabled(enable);
+        btnDelete.setEnabled(enable);
+        btnExport.setEnabled(enable);
+        btnRefresh.setEnabled(enable);
+    }
+
+    // Methods to access buttons if needed
+    public JButton getAddButton() { return btnAdd; }
+    public JButton getEditButton() { return btnEdit; }
+    public JButton getDeleteButton() { return btnDelete; }
+    public JButton getExportButton() { return btnExport; }
+    public JButton getRefreshButton() { return btnRefresh; }
+}

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<qualifiedTypeNameHistroy>
+    <fullyQualifiedTypeName name="component.UserRoleManagementPanel"/>
+    <fullyQualifiedTypeName name="dao.UserRoleDAO"/>
+    <fullyQualifiedTypeName name="javax.swing.JToolBar"/>
+    <fullyQualifiedTypeName name="component.ComboItem"/>
+    <fullyQualifiedTypeName name="style.CreateRoundedButton"/>
+    <fullyQualifiedTypeName name="export.ExcelExporterNV"/>
+    <fullyQualifiedTypeName name="org.apache.poi.hssf.usermodel.HSSFWorkbook"/>
+    <fullyQualifiedTypeName name="org.apache.poi.hssf.usermodel.HSSFSheet"/>
+    <fullyQualifiedTypeName name="org.apache.poi.hssf.usermodel.HSSFCellStyle"/>
+    <fullyQualifiedTypeName name="org.apache.poi.hssf.usermodel.HSSFExtendedColor"/>
+    <fullyQualifiedTypeName name="org.apache.poi.hssf.util.HSSFColor"/>
+    <fullyQualifiedTypeName name="org.apache.logging.log4j.core.config.builder.api.Component"/>
+    <fullyQualifiedTypeName name="connection.MyConnection"/>
+    <fullyQualifiedTypeName name="style.CreateActionButton"/>
+    <fullyQualifiedTypeName name="java.awt.event.ActionListener"/>
+    <fullyQualifiedTypeName name="java.awt.Image"/>
+    <fullyQualifiedTypeName name="java.awt.Insets"/>
+    <fullyQualifiedTypeName name="service.PermissionUtils"/>
+    <fullyQualifiedTypeName name="bus.UserRoleBUS"/>
+    <fullyQualifiedTypeName name="java.util.logging.Logger"/>
+    <fullyQualifiedTypeName name="javax.swing.table.DefaultTableCellRenderer"/>
+    <fullyQualifiedTypeName name="java.util.stream.Collector"/>
+    <fullyQualifiedTypeName name="java.util.stream.Collectors"/>
+    <fullyQualifiedTypeName name="bus.SanPhamBUS"/>
+    <fullyQualifiedTypeName name="java.util.List"/>
+    <fullyQualifiedTypeName name="java.text.NumberFormat"/>
+    <fullyQualifiedTypeName name="entity.UserSession"/>
+    <fullyQualifiedTypeName name="service.PermissionChecker"/>
+    <fullyQualifiedTypeName name="java.awt.event.MouseEvent"/>
+    <fullyQualifiedTypeName name="java.util.logging.Level"/>
+    <fullyQualifiedTypeName name="gui.Form_SanPham"/>
+    <fullyQualifiedTypeName name="entity.UserRole"/>
+    <fullyQualifiedTypeName name="bus.DanhMucBUS"/>
+</qualifiedTypeNameHistroy>

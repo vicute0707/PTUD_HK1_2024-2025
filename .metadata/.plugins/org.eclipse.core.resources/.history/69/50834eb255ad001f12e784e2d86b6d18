@@ -1,0 +1,210 @@
+package export;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import entity.User;
+import entity.Permission;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.List;
+
+public class ExcelExporterNV {
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd/MM/yyyy");
+    
+    public void exportEmployees(List<User> users, String filePath) throws Exception {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Danh sách nhân viên");
+            
+            // Create header style
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            
+            // Create content style
+            CellStyle contentStyle = createContentStyle(workbook);
+            
+            // Create header row
+            Row headerRow = sheet.createRow(0);
+            String[] columns = {
+                "Mã NV", "Họ và tên", "Giới tính", "Ngày sinh", 
+                "SĐT", "Email", "Địa chỉ", "Chức vụ", "Trạng thái"
+            };
+            
+            for (int i = 0; i < columns.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(columns[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Fill data rows
+            int rowNum = 1;
+            for (User user : users) {
+                Row row = sheet.createRow(rowNum++);
+                
+                row.createCell(0).setCellValue(user.getUserID());
+                row.createCell(1).setCellValue(user.getFullName());
+                row.createCell(2).setCellValue(user.getGender());
+                row.createCell(3).setCellValue(user.getBirthDate() != null ? 
+                    DATE_FORMAT.format(user.getBirthDate()) : "");
+                row.createCell(4).setCellValue(user.getPhone());
+                row.createCell(5).setCellValue(user.getEmail());
+           
+                row.createCell(6).setCellValue(user.getRole());
+                row.createCell(7).setCellValue(user.getStatus());
+                
+                // Apply content style to all cells
+                for (int i = 0; i < columns.length; i++) {
+                    Cell cell = row.getCell(i);
+                    cell.setCellStyle(contentStyle);
+                }
+            }
+            
+            // Auto size columns
+            for (int i = 0; i < columns.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+            }
+        }
+    }
+    
+    public void exportPermissions(List<Permission> permissions, String filePath) throws Exception {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Danh sách quyền");
+            
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle contentStyle = createContentStyle(workbook);
+            
+            // Create header row
+            Row headerRow = sheet.createRow(0);
+            String[] columns = {"Mã quyền", "Tên quyền", "Mô tả", "Ngày tạo", "Trạng thái"};
+            
+            for (int i = 0; i < columns.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(columns[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Fill data rows
+            int rowNum = 1;
+            for (Permission perm : permissions) {
+                Row row = sheet.createRow(rowNum++);
+                
+                row.createCell(0).setCellValue(perm.getPermissionID());
+                row.createCell(1).setCellValue(perm.getName());
+                row.createCell(2).setCellValue(perm.getDescription());
+            
+                
+                // Apply content style to all cells
+                for (int i = 0; i < columns.length; i++) {
+                    Cell cell = row.getCell(i);
+                    cell.setCellStyle(contentStyle);
+                }
+            }
+            
+            // Auto size columns
+            for (int i = 0; i < columns.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+            }
+        }
+    }
+    
+    public void exportAccounts(List<User> users, String filePath) throws Exception {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Danh sách tài khoản");
+            
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle contentStyle = createContentStyle(workbook);
+            
+            // Create header row
+            Row headerRow = sheet.createRow(0);
+            String[] columns = {
+                "Mã NV", "Tên đăng nhập", "Họ và tên", 
+                "Chức vụ", "Lần đăng nhập cuối", "Trạng thái"
+            };
+            
+            for (int i = 0; i < columns.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(columns[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Fill data rows
+            int rowNum = 1;
+            for (User user : users) {
+                Row row = sheet.createRow(rowNum++);
+                
+                row.createCell(0).setCellValue(user.getUserID());
+                row.createCell(1).setCellValue(user.getUsername());
+                row.createCell(2).setCellValue(user.getFullName());
+                row.createCell(3).setCellValue(user.getRole());
+          
+                row.createCell(4).setCellValue(user.getStatus());
+                
+                // Apply content style to all cells
+                for (int i = 0; i < columns.length; i++) {
+                    Cell cell = row.getCell(i);
+                    cell.setCellStyle(contentStyle);
+                }
+            }
+            
+            // Auto size columns
+            for (int i = 0; i < columns.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+            }
+        }
+    }
+    
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        
+        // Font
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 12);
+        style.setFont(font);
+        
+        // Background color
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        
+        // Border
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        
+        // Alignment
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        
+        return style;
+    }
+    
+    private CellStyle createContentStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        
+        // Border
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        
+        // Alignment
+        style.setAlignment(HorizontalAlignment.LEFT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        
+        return style;
+    }
+}
