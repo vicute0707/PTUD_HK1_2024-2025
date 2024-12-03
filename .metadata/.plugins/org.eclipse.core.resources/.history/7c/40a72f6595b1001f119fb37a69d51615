@@ -1,0 +1,850 @@
+package gui;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.io.FileWriter;
+import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PiePlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.general.DefaultPieDataset;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+import com.toedter.calendar.JDateChooser;
+
+import bus.ImportBUS;
+import bus.SanPhamBUS;
+import entity.Import;
+import entity.ImportDetail;
+import entity.SanPham;
+import entity.UserSession;
+import service.PermissionChecker;
+import style.CreateRoundedButton;
+import style.CustomScrollBarUI;
+
+public class Form_ThongKe extends JPanel {
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+
+	private JTable importTable;
+	private JTable productTable;
+	private DefaultTableModel importTableModel;
+	private DefaultTableModel productTableModel;
+	private JDateChooser startDateChooser;
+	private JDateChooser endDateChooser;
+	private JPanel importChartPanel;
+	private JPanel productChartPanel;
+	private ImportBUS importBUS;
+	private SanPhamBUS sanPhamBUS;
+
+	public Form_ThongKe() {
+		importBUS = new ImportBUS();
+		sanPhamBUS = new SanPhamBUS();
+		initComponents();
+		loadInitialData();
+	}
+
+	private void loadInitialData() {
+		// Set default date range to last 30 days
+		LocalDate endDate = LocalDate.now();
+		LocalDate startDate = endDate.minusDays(30);
+
+		// Convert LocalDate to Date for JDateChooser
+		startDateChooser.setDate(java.sql.Date.valueOf(startDate));
+		endDateChooser.setDate(java.sql.Date.valueOf(endDate));
+
+		// Load import statistics
+		loadImportStatistics(startDate, endDate);
+
+		// Load product statistics
+		loadProductStatistics(startDate, endDate);
+	}
+
+	private void loadImportStatistics(LocalDate startDate, LocalDate endDate) {
+		try {
+			// Clear existing data
+			importTableModel.setRowCount(0);
+
+			// Get all imports
+			List<Import> imports = importBUS.getAllImports();
+
+			// Filter imports by date range and collect statistics
+			Map<LocalDate, List<Import>> importsByDate = imports.stream().filter(imp -> {
+				LocalDate importDate = imp.getImportDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+				return !importDate.isBefore(startDate) && !importDate.isAfter(endDate);
+			}).collect(Collectors
+					.groupingBy(imp -> imp.getImportDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()));
+
+			// Create dataset for chart
+			DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+			BigDecimal totalImportValue = BigDecimal.ZERO;
+			int totalProducts = 0;
+
+			// Process each day's imports
+			for (Map.Entry<LocalDate, List<Import>> entry : importsByDate.entrySet()) {
+				LocalDate date = entry.getKey();
+				List<Import> dayImports = entry.getValue();
+
+				// Calculate daily totals
+				BigDecimal dailyTotal = dayImports.stream().map(imp -> BigDecimal.valueOf(imp.getTotalAmount()))
+						.reduce(BigDecimal.ZERO, BigDecimal::add);
+
+				// Add to total
+				totalImportValue = totalImportValue.add(dailyTotal);
+
+				// Get product counts for each import
+				for (Import imp : dayImports) {
+					try {
+						List<ImportDetail> details = importBUS.getImportDetailsByImportId(imp.getImportID());
+						int productCount = details.stream().mapToInt(ImportDetail::getQuantity).sum();
+						totalProducts += productCount;
+
+						// Add row to table
+						Object[] row = { imp.getImportID(), imp.getImportDate(), imp.getSupplier(), productCount,
+								imp.getTotalAmount() };
+						importTableModel.addRow(row);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+
+				// Add to chart dataset
+				dataset.addValue(dailyTotal.doubleValue(), "Giá trị nhập hàng",
+						date.format(DateTimeFormatter.ofPattern("dd/MM")));
+			}
+
+			// Create and configure chart
+			JFreeChart chart = ChartFactory.createBarChart(
+					"Thống kê nhập hàng từ " + startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + " đến "
+							+ endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+					"Ngày", "Giá trị (VNĐ)", dataset, PlotOrientation.VERTICAL, true, true, false);
+
+			// Customize chart appearance
+			chart.setBackgroundPaint(Color.WHITE);
+			chart.getPlot().setBackgroundPaint(Color.WHITE);
+
+			// Update chart panel
+			ChartPanel chartPanel = new ChartPanel(chart);
+			chartPanel.setPreferredSize(new Dimension(importChartPanel.getWidth(), 300));
+			importChartPanel.removeAll();
+			importChartPanel.add(chartPanel);
+			importChartPanel.revalidate();
+
+			// Display summary statistics
+			showImportSummary(totalImportValue, totalProducts, importsByDate.size());
+
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu thống kê nhập hàng: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			e.printStackTrace();
+		}
+	}
+
+	private void loadProductStatistics(LocalDate startDate, LocalDate endDate) {
+		try {
+			// Clear existing data
+			productTableModel.setRowCount(0);
+
+			// Get all products and their variants
+			List<SanPham> products = sanPhamBUS.getAllSanPham();
+			DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+			// Process each product
+			for (SanPham product : products) {
+				// Get import details for this product's variants
+				int totalImported = calculateTotalImported(product, startDate, endDate);
+				double totalValue = calculateProductValue(product);
+
+				// Add to table
+				Object[] row = { product.getMaSP(), product.getTenSP(), totalImported, product.getSoLuongTonKho(),
+						formatCurrency(totalValue) };
+				productTableModel.addRow(row);
+
+				// Add to chart dataset for top products by value
+				dataset.addValue(totalValue, "Giá trị tồn kho", product.getTenSP());
+			}
+
+			// Create product value chart
+			JFreeChart chart = ChartFactory.createBarChart("Giá trị tồn kho theo sản phẩm", "Sản phẩm", "Giá trị (VNĐ)",
+					dataset, PlotOrientation.VERTICAL, true, true, false);
+
+			// Customize chart appearance
+			chart.setBackgroundPaint(Color.WHITE);
+			chart.getPlot().setBackgroundPaint(Color.WHITE);
+
+			// Update chart panel
+			ChartPanel chartPanel = new ChartPanel(chart);
+			chartPanel.setPreferredSize(new Dimension(productChartPanel.getWidth(), 300));
+			productChartPanel.removeAll();
+			productChartPanel.add(chartPanel);
+			productChartPanel.revalidate();
+
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu thống kê sản phẩm: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			e.printStackTrace();
+		}
+	}
+
+	// Helper methods
+
+	private void showImportSummary(BigDecimal totalValue, int totalProducts, int totalDays) {
+		JPanel summaryPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 5));
+		summaryPanel.setBackground(Color.WHITE);
+
+		summaryPanel.add(createSummaryLabel("Tổng giá trị nhập:", formatCurrency(totalValue.doubleValue())));
+		summaryPanel.add(createSummaryLabel("Tổng số sản phẩm:", String.format("%,d", totalProducts)));
+		summaryPanel.add(createSummaryLabel("Số ngày có nhập hàng:", String.valueOf(totalDays)));
+
+		// Add to the main panel above the chart
+		add(summaryPanel, BorderLayout.NORTH);
+	}
+
+	private JLabel createSummaryLabel(String title, String value) {
+		JLabel label = new JLabel(String.format("<html><b>%s</b> %s</html>", title, value));
+		label.setFont(CONTENT_FONT);
+		return label;
+	}
+
+	private String formatCurrency(double amount) {
+		return String.format("%,d VNĐ", (long) amount);
+	}
+
+	private int calculateTotalImported(SanPham product, LocalDate startDate, LocalDate endDate) {
+		try {
+			// Get all imports within date range
+			List<Import> imports = importBUS.getAllImports().stream().filter(imp -> {
+				// Convert java.util.Date to LocalDate for comparison
+				LocalDate importDate = LocalDate.parse(new SimpleDateFormat("yyyy-MM-dd").format(imp.getImportDate()));
+				return !importDate.isBefore(startDate) && !importDate.isAfter(endDate);
+			}).collect(Collectors.toList());
+
+			int totalQuantity = 0;
+
+			// Sum up quantities for this product across all imports
+			for (Import imp : imports) {
+				List<ImportDetail> details = importBUS.getImportDetailsByImportId(imp.getImportID());
+				for (ImportDetail detail : details) {
+					// Check if this detail belongs to any variant of the product
+					if (detail.getProductName().equals(product.getTenSP())) {
+						totalQuantity += detail.getQuantity();
+					}
+				}
+			}
+
+			return totalQuantity;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return 0;
+		}
+	}
+
+	private double calculateProductValue(SanPham product) {
+		try {
+			// Get all variants of this product
+			double totalValue = 0;
+
+			// Sum up (quantity * average price) for each variant
+			List<Import> imports = importBUS.getAllImports();
+			for (Import imp : imports) {
+				List<ImportDetail> details = importBUS.getImportDetailsByImportId(imp.getImportID());
+				for (ImportDetail detail : details) {
+					if (detail.getProductName().equals(product.getTenSP())) {
+						totalValue += detail.getQuantity() * detail.getPrice();
+					}
+				}
+			}
+
+			return totalValue;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return 0;
+		}
+	}
+
+	private double getAverageImportPrice(String productId) {
+		try {
+			List<Import> imports = importBUS.getAllImports();
+			List<Double> prices = new ArrayList<>();
+
+			// Collect all import prices for this product
+			for (Import imp : imports) {
+				List<ImportDetail> details = importBUS.getImportDetailsByImportId(imp.getImportID());
+				for (ImportDetail detail : details) {
+					// Match by product name since we don't have direct product ID in ImportDetail
+					SanPham product = sanPhamBUS.getSanPhamById(productId);
+					if (detail.getProductName().equals(product.getTenSP())) {
+						prices.add(detail.getPrice());
+					}
+				}
+			}
+
+			// Calculate average price
+			if (prices.isEmpty()) {
+				return 0;
+			}
+
+			return prices.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return 0;
+		}
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout());
+		setBorder(new EmptyBorder(20, 20, 20, 20));
+		setBackground(Color.WHITE);
+
+		// Create tabbed pane for different statistics
+		JTabbedPane tabbedPane = new JTabbedPane();
+		tabbedPane.setFont(HEADER_FONT);
+		tabbedPane.setBackground(Color.WHITE);
+
+		// Add tabs for import and product statistics
+		tabbedPane.addTab("Thống kê nhập hàng", createImportPanel());
+		tabbedPane.addTab("Thống kê sản phẩm", createProductPanel());
+
+		add(tabbedPane, BorderLayout.CENTER);
+	}
+
+	private JPanel createImportPanel() {
+		JPanel panel = new JPanel(new BorderLayout(0, 20));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+		// Control panel at the top
+		panel.add(createImportControlPanel(), BorderLayout.NORTH);
+
+		// Split pane for chart and table
+		JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+		splitPane.setDividerLocation(300);
+		splitPane.setBackground(Color.WHITE);
+
+		// Chart panel
+		importChartPanel = new JPanel(new BorderLayout());
+		importChartPanel.setBackground(Color.WHITE);
+		splitPane.setTopComponent(importChartPanel);
+
+		// Table panel
+		JPanel tablePanel = createImportTablePanel();
+		splitPane.setBottomComponent(tablePanel);
+
+		panel.add(splitPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private JPanel createProductPanel() {
+	    // Main panel with BorderLayout for organized component placement
+	    JPanel panel = new JPanel(new BorderLayout(0, 20));
+	    panel.setBackground(Color.WHITE);
+	    panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+	    // Add the control panel at the top
+	    panel.add(createProductControlPanel(), BorderLayout.NORTH);
+
+	    // Create split pane for chart and table
+	    JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+	    splitPane.setDividerLocation(300);
+	    splitPane.setBackground(Color.WHITE);
+
+	    // Initialize and add chart panel
+	    productChartPanel = new JPanel(new BorderLayout());
+	    productChartPanel.setBackground(Color.WHITE);
+	    splitPane.setTopComponent(createProductChartPanel());
+
+	    // Add table panel to bottom of split pane
+	    splitPane.setBottomComponent(createProductTablePanel());
+
+	    // Add split pane to main panel
+	    panel.add(splitPane, BorderLayout.CENTER);
+
+	    return panel;
+	}
+
+	private JPanel createProductControlPanel() {
+	    JPanel panel = new JPanel(new BorderLayout());
+	    panel.setBackground(Color.WHITE);
+
+	    // Left side - Category filter
+	    JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+	    leftPanel.setBackground(Color.WHITE);
+
+	    JComboBox<String> categoryCombo = new JComboBox<>(new String[]{
+	        "Tất cả danh mục", "Áo", "Quần", "Váy"
+	    });
+	    categoryCombo.setPreferredSize(new Dimension(150, 30));
+	    categoryCombo.setFont(CONTENT_FONT);
+
+	    // Add listener to update statistics when category changes
+	    categoryCombo.addActionListener(e -> updateProductStatistics(
+	        (String) categoryCombo.getSelectedItem()
+	    ));
+
+	    leftPanel.add(new JLabel("Danh mục:"));
+	    leftPanel.add(categoryCombo);
+
+	    // Right side - Export button
+	    JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+	    rightPanel.setBackground(Color.WHITE);
+
+	    CreateRoundedButton createRoundedButton = new CreateRoundedButton();
+	    JButton exportButton = createRoundedButton.createRoundedButton(
+	        "Xuất báo cáo", "/icon/printer.png", true);
+	    
+	    // Configure export button with permissions
+	    configureButtonWithPermission(exportButton, 
+	        UserSession.getInstance().getCurrentUser().getUserID(),
+	        PermissionChecker.PERM_REPORT,
+	        () -> exportImportReport());
+
+	    rightPanel.add(exportButton);
+
+	    // Add panels to main control panel
+	    panel.add(leftPanel, BorderLayout.WEST);
+	    panel.add(rightPanel, BorderLayout.EAST);
+
+	    return panel;
+	}
+
+	private JPanel createProductChartPanel() {
+	    JPanel panel = new JPanel(new GridLayout(1, 2, 10, 0));
+	    panel.setBackground(Color.WHITE);
+	    panel.setBorder(new EmptyBorder(0, 5, 5, 5));
+
+	    // Create stock value chart
+	    JPanel stockValueChart = createStockValueChart();
+	    
+	    // Create category distribution chart
+	    JPanel categoryChart = createCategoryDistributionChart();
+
+	    panel.add(stockValueChart);
+	    panel.add(categoryChart);
+
+	    return panel;
+	}
+
+	private JPanel createStockValueChart() {
+	    // Create dataset for stock value chart
+	    DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+	    List<SanPham> products = sanPhamBUS.getAllSanPham();
+
+	    // Get top 10 products by stock value
+	    products.stream()
+	        .sorted((p1, p2) -> Double.compare(
+	            calculateProductValue(p2), 
+	            calculateProductValue(p1)
+	        ))
+	        .limit(10)
+	        .forEach(product -> {
+	            dataset.addValue(
+	                calculateProductValue(product),
+	                "Giá trị tồn kho",
+	                product.getTenSP()
+	            );
+	        });
+
+	    // Create the chart
+	    JFreeChart chart = ChartFactory.createBarChart(
+	        "Top 10 sản phẩm theo giá trị tồn kho",
+	        "Sản phẩm",
+	        "Giá trị (VNĐ)",
+	        dataset,
+	        PlotOrientation.VERTICAL,
+	        true,
+	        true,
+	        false
+	    );
+
+	    // Customize chart appearance
+	    customizeChart(chart);
+
+	    // Create panel for chart
+	    ChartPanel chartPanel = new ChartPanel(chart);
+	    chartPanel.setBackground(Color.WHITE);
+
+	    return chartPanel;
+	}
+
+	private JPanel createCategoryDistributionChart() {
+	    // Create dataset for category distribution
+	    DefaultPieDataset dataset = new DefaultPieDataset();
+	    List<SanPham> products = sanPhamBUS.getAllSanPham();
+
+	    // Calculate total products by category
+	    Map<String, Long> categoryCount = products.stream()
+	        .collect(Collectors.groupingBy(
+	            product -> product.getDanhmuc().getTenDM(),
+	            Collectors.counting()
+	        ));
+
+	    // Add data to dataset
+	    categoryCount.forEach((category, count) -> 
+	        dataset.setValue(category, count)
+	    );
+
+	    // Create the chart
+	    JFreeChart chart = ChartFactory.createPieChart(
+	        "Phân bố sản phẩm theo danh mục",
+	        dataset,
+	        true,
+	        true,
+	        false
+	    );
+
+	    // Customize chart appearance
+	    customizeChart(chart);
+
+	    // Create panel for chart
+	    ChartPanel chartPanel = new ChartPanel(chart);
+	    chartPanel.setBackground(Color.WHITE);
+
+	    return chartPanel;
+	}
+
+	private JPanel createProductTablePanel() {
+	    JPanel panel = new JPanel(new BorderLayout());
+	    panel.setBackground(Color.WHITE);
+
+	    // Initialize table model with columns
+	    String[] columns = {
+	        "Mã SP", 
+	        "Tên sản phẩm", 
+	        "Danh mục", 
+	        "Tồn kho", 
+	        "Giá trị tồn",
+	        "Trạng thái"
+	    };
+	    
+	    productTableModel = new DefaultTableModel(columns, 0) {
+	        @Override
+	        public boolean isCellEditable(int row, int column) {
+	            return false;
+	        }
+	    };
+
+	    // Create and setup table
+	    JTable productTable = new JTable(productTableModel);
+	    setupProductTable(productTable);
+
+	    // Create scroll pane for table
+	    JScrollPane scrollPane = new JScrollPane(productTable);
+	    scrollPane.getViewport().setBackground(Color.WHITE);
+	   
+	    panel.add(scrollPane, BorderLayout.CENTER);
+
+	    return panel;
+	}
+
+	private void setupProductTable(JTable table) {
+	    // Basic table setup
+	    table.setFont(CONTENT_FONT);
+	    table.setRowHeight(30);
+	    table.setGridColor(new Color(245, 245, 245));
+	    table.setSelectionBackground(new Color(252, 231, 243));
+	    table.setSelectionForeground(Color.BLACK);
+
+	    // Setup header
+	    JTableHeader header = table.getTableHeader();
+	    header.setFont(HEADER_FONT);
+	    header.setBackground(Color.WHITE);
+	    header.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+
+	    // Custom renderers for specific columns
+	    table.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer() {
+	        @Override
+	        public Component getTableCellRendererComponent(
+	            JTable table, Object value, boolean isSelected, boolean hasFocus, 
+	            int row, int column
+	        ) {
+	            super.getTableCellRendererComponent(
+	                table, value, isSelected, hasFocus, row, column);
+	            setHorizontalAlignment(JLabel.RIGHT);
+	            setText(formatCurrency((Double) value));
+	            return this;
+	        }
+	    });
+
+	    // Status column renderer
+	    table.getColumnModel().getColumn(5).setCellRenderer(new DefaultTableCellRenderer() {
+	        @Override
+	        public Component getTableCellRendererComponent(
+	            JTable table, Object value, boolean isSelected, boolean hasFocus, 
+	            int row, int column
+	        ) {
+	            super.getTableCellRendererComponent(
+	                table, value, isSelected, hasFocus, row, column);
+	            setHorizontalAlignment(JLabel.CENTER);
+	            
+	            String status = value.toString();
+	            switch (status) {
+	                case "Đang kinh doanh":
+	                    setForeground(new Color(0, 128, 0));
+	                    break;
+	                case "Sắp hết":
+	                    setForeground(new Color(255, 140, 0));
+	                    break;
+	                case "Ngừng kinh doanh":
+	                    setForeground(Color.RED);
+	                    break;
+	            }
+	            
+	            return this;
+	        }
+	    });
+	}
+
+	private void customizeChart(JFreeChart chart) {
+	    chart.setBackgroundPaint(Color.WHITE);
+	    chart.getPlot().setBackgroundPaint(Color.WHITE);
+	    chart.getTitle().setFont(HEADER_FONT);
+	    
+	    if (chart.getPlot() instanceof CategoryPlot) {
+	        CategoryPlot plot = (CategoryPlot) chart.getPlot();
+	        plot.getDomainAxis().setTickLabelFont(CONTENT_FONT);
+	        plot.getRangeAxis().setTickLabelFont(CONTENT_FONT);
+	    } else if (chart.getPlot() instanceof PiePlot) {
+	        PiePlot plot = (PiePlot) chart.getPlot();
+	        plot.setLabelFont(CONTENT_FONT);
+	    }
+	}
+	
+
+	private JPanel createImportControlPanel() {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+		panel.setBackground(Color.WHITE);
+
+		startDateChooser = new JDateChooser();
+		endDateChooser = new JDateChooser();
+		startDateChooser.setPreferredSize(new Dimension(150, 30));
+		endDateChooser.setPreferredSize(new Dimension(150, 30));
+
+		CreateRoundedButton createRoundedButton = new CreateRoundedButton();
+
+		JButton searchButton = createRoundedButton.createRoundedButton("Thống kê", "/icon/search.png", true);
+		configureButtonWithPermission(searchButton, UserSession.getInstance().getCurrentUser().getUserID(),
+				PermissionChecker.PERM_REPORT, () -> updateImportStatistics());
+
+		JButton exportButton = createRoundedButton.createRoundedButton("Xuất báo cáo", "/icon/printer.png", true);
+		configureButtonWithPermission(exportButton, UserSession.getInstance().getCurrentUser().getUserID(),
+				PermissionChecker.PERM_REPORT, () -> exportImportReport());
+
+		panel.add(new JLabel("Từ ngày:"));
+		panel.add(startDateChooser);
+		panel.add(new JLabel("Đến ngày:"));
+		panel.add(endDateChooser);
+		panel.add(searchButton);
+		panel.add(exportButton);
+
+		return panel;
+	}
+
+	private JPanel createImportTablePanel() {
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.setBackground(Color.WHITE);
+
+		// Initialize table model with columns
+		String[] columns = { "Mã phiếu nhập", "Ngày nhập", "Nhà cung cấp", "Số lượng SP", "Tổng tiền" };
+		importTableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		importTable = new JTable(importTableModel);
+		setupTable(importTable);
+
+		JScrollPane scrollPane = new JScrollPane(importTable);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+
+		panel.add(scrollPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private void setupTable(JTable table) {
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(30);
+		table.setGridColor(new Color(245, 245, 245));
+		table.setSelectionBackground(new Color(252, 231, 243));
+		table.setSelectionForeground(Color.BLACK);
+
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+
+		// Set number format renderer for amount columns
+		DefaultTableCellRenderer amountRenderer = new DefaultTableCellRenderer() {
+			@Override
+			public void setValue(Object value) {
+				if (value instanceof Number) {
+					setHorizontalAlignment(JLabel.RIGHT);
+					setText(String.format("%,d VNĐ", ((Number) value).longValue()));
+				} else {
+					super.setValue(value);
+				}
+			}
+		};
+		table.getColumnModel().getColumn(4).setCellRenderer(amountRenderer);
+	}
+
+	private void updateImportStatistics() {
+		if (startDateChooser.getDate() == null || endDateChooser.getDate() == null) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn khoảng thời gian", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		LocalDate startDate = startDateChooser.getDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+		LocalDate endDate = endDateChooser.getDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+
+		// Get import data and update table
+		List<Import> imports = importBUS.getAllImports();
+		updateImportTable(imports, startDate, endDate);
+
+		// Update chart
+		updateImportChart(imports, startDate, endDate);
+	}
+
+	private void updateImportTable(List<Import> imports, LocalDate startDate, LocalDate endDate) {
+		importTableModel.setRowCount(0);
+
+		imports.stream().filter(imp -> {
+			LocalDate importDate = imp.getImportDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+			return !importDate.isBefore(startDate) && !importDate.isAfter(endDate);
+		}).forEach(imp -> {
+			try {
+				List<ImportDetail> details = importBUS.getImportDetailsByImportId(imp.getImportID());
+				Object[] row = { imp.getImportID(), imp.getImportDate(), imp.getSupplier(),
+						details.stream().mapToInt(ImportDetail::getQuantity).sum(), imp.getTotalAmount() };
+				importTableModel.addRow(row);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		});
+	}
+
+	private void updateImportChart(List<Import> imports, LocalDate startDate, LocalDate endDate) {
+		DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+		// Group imports by date and calculate daily totals
+		Map<LocalDate, Double> dailyTotals = imports.stream().filter(imp -> {
+			LocalDate importDate = imp.getImportDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+			return !importDate.isBefore(startDate) && !importDate.isAfter(endDate);
+		}).collect(Collectors.groupingBy(
+				imp -> imp.getImportDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+				Collectors.summingDouble(Import::getTotalAmount)));
+
+		// Add data to chart dataset
+		dailyTotals.forEach((date, total) -> {
+			dataset.addValue(total, "Tổng tiền nhập", date.toString());
+		});
+
+		// Create chart
+		JFreeChart chart = ChartFactory.createBarChart("Biểu đồ nhập hàng", "Ngày", "Tổng tiền (VNĐ)", dataset,
+				PlotOrientation.VERTICAL, true, true, false);
+
+		// Update chart panel
+		ChartPanel chartPanel = new ChartPanel(chart);
+		importChartPanel.removeAll();
+		importChartPanel.add(chartPanel);
+		importChartPanel.revalidate();
+	}
+
+	private void exportImportReport() {
+		// Implementation for exporting import statistics report
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setDialogTitle("Chọn vị trí lưu báo cáo");
+
+		if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+			String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+			if (!filePath.endsWith(".html")) {
+				filePath += ".html";
+			}
+
+			try (FileWriter writer = new FileWriter(filePath)) {
+				// Write report content
+				writer.write("<html><head><style>");
+				writer.write("table { border-collapse: collapse; width: 100%; }");
+				writer.write("th, td { border: 1px solid black; padding: 8px; text-align: left; }");
+				writer.write("</style></head><body>");
+
+				// Add report title and date range
+				writer.write("<h2>Báo cáo nhập hàng</h2>");
+				writer.write("<p>Từ ngày: " + startDateChooser.getDate() + "</p>");
+				writer.write("<p>Đến ngày: " + endDateChooser.getDate() + "</p>");
+
+				// Add table data
+				writer.write("<table>");
+				// Add headers
+				writer.write("<tr>");
+				for (int i = 0; i < importTable.getColumnCount(); i++) {
+					writer.write("<th>" + importTable.getColumnName(i) + "</th>");
+				}
+				writer.write("</tr>");
+
+				// Add data rows
+				for (int i = 0; i < importTable.getRowCount(); i++) {
+					writer.write("<tr>");
+					for (int j = 0; j < importTable.getColumnCount(); j++) {
+						writer.write("<td>" + importTable.getValueAt(i, j) + "</td>");
+					}
+					writer.write("</tr>");
+				}
+
+				writer.write("</table></body></html>");
+
+				JOptionPane.showMessageDialog(this, "Xuất báo cáo thành công!", "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+
+			} catch (Exception e) {
+				JOptionPane.showMessageDialog(this, "Lỗi khi xuất báo cáo: " + e.getMessage(), "Lỗi",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	// Similar methods for product statistics panel...
+	// (I'll continue with the product statistics implementation in the next part)
+
+	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
+		if (PermissionChecker.hasPermission(userId, permission)) {
+			button.setEnabled(true);
+			button.addActionListener(e -> {
+				if (button.isEnabled()) {
+					action.run();
+				}
+			});
+		} else {
+			button.setEnabled(false);
+			String permissionDesc = PermissionChecker.getPermissionDescription(permission);
+			button.setToolTipText("Bạn không có quyền " + permissionDesc);
+		}
+	}
+}

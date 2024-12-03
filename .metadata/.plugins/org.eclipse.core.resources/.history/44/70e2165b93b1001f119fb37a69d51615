@@ -1,0 +1,493 @@
+package gui;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.data.category.DefaultCategoryDataset;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+import com.toedter.calendar.JDateChooser;
+
+import bus.DonHangBUS;
+import entity.DonHang;
+import entity.UserSession;
+import service.PermissionChecker;
+import style.CreateRoundedButton;
+import style.CustomScrollBarUI;
+
+public class Form_ThongKe extends JPanel {
+	private static final long serialVersionUID = 1L;
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color CONTENT_COLOR = new Color(255, 192, 203);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+	private static final Logger LOGGER = Logger.getLogger(Form_ThongKe.class.getName());
+
+	private JTable revenueTable;
+	private JTable productTable;
+	private DefaultTableModel revenueTableModel;
+	private DefaultTableModel productTableModel;
+	private JDateChooser startDateChooser;
+	private JDateChooser endDateChooser;
+	private JPanel revenueChartPanel;
+	private JPanel productChartPanel;
+	private DonHangBUS donHangBUS;
+
+	public Form_ThongKe() {
+		donHangBUS = new DonHangBUS();
+		initComponents();
+		loadInitialData();
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout());
+		setBorder(new EmptyBorder(20, 20, 20, 20));
+		setBackground(Color.WHITE);
+
+		// Create tabbed pane
+		JTabbedPane tabbedPane = new JTabbedPane();
+		tabbedPane.setFont(HEADER_FONT);
+		tabbedPane.setBackground(Color.WHITE);
+
+		// Add tabs
+		tabbedPane.addTab("Thống kê doanh thu", createRevenuePanel());
+		tabbedPane.addTab("Thống kê sản phẩm", createProductPanel());
+
+		add(tabbedPane, BorderLayout.CENTER);
+	}
+
+	private JPanel createRevenuePanel() {
+		JPanel panel = new JPanel(new BorderLayout(0, 20));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+		// Top controls panel
+		panel.add(createRevenueControlPanel(), BorderLayout.NORTH);
+
+		// Center panel with chart and table
+		JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+		splitPane.setDividerLocation(300);
+		splitPane.setBackground(Color.WHITE);
+
+		// Chart panel
+		revenueChartPanel = new JPanel(new BorderLayout());
+		revenueChartPanel.setBackground(Color.WHITE);
+		splitPane.setTopComponent(revenueChartPanel);
+
+		// Table panel
+		JPanel tablePanel = createRevenueTablePanel();
+		splitPane.setBottomComponent(tablePanel);
+
+		panel.add(splitPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private JPanel createProductPanel() {
+		JPanel panel = new JPanel(new BorderLayout(0, 20));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+		// Top controls panel
+		panel.add(createProductControlPanel(), BorderLayout.NORTH);
+
+		// Center panel with chart and table
+		JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+		splitPane.setDividerLocation(300);
+		splitPane.setBackground(Color.WHITE);
+
+		// Chart panel
+		productChartPanel = new JPanel(new BorderLayout());
+		productChartPanel.setBackground(Color.WHITE);
+		splitPane.setTopComponent(productChartPanel);
+
+		// Table panel
+		JPanel tablePanel = createProductTablePanel();
+		splitPane.setBottomComponent(tablePanel);
+
+		panel.add(splitPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private JPanel createRevenueControlPanel() {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+		panel.setBackground(Color.WHITE);
+
+		startDateChooser = new JDateChooser();
+		endDateChooser = new JDateChooser();
+		startDateChooser.setPreferredSize(new Dimension(150, 30));
+		endDateChooser.setPreferredSize(new Dimension(150, 30));
+
+		CreateRoundedButton createRoundedButton = new CreateRoundedButton();
+
+		JButton searchButton = createRoundedButton.createRoundedButton("Tìm kiếm", "/icon/search.png", true);
+		configureButtonWithPermission(searchButton, UserSession.getInstance().getCurrentUser().getUserID(),
+				PermissionChecker.PERM_REPORT, () -> handleRevenueSearch());
+
+		JButton exportButton = createRoundedButton.createRoundedButton("Xuất báo cáo", "/icon/printer.png", true);
+		configureButtonWithPermission(exportButton, UserSession.getInstance().getCurrentUser().getUserID(),
+				PermissionChecker.PERM_REPORT, () -> handleRevenueExport());
+
+		panel.add(new JLabel("Từ ngày:"));
+		panel.add(startDateChooser);
+		panel.add(new JLabel("Đến ngày:"));
+		panel.add(endDateChooser);
+		panel.add(searchButton);
+		panel.add(exportButton);
+
+		return panel;
+	}
+
+	private JPanel createProductControlPanel() {
+		// Similar to createRevenueControlPanel but for product statistics
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+		panel.setBackground(Color.WHITE);
+
+		CreateRoundedButton createRoundedButton = new CreateRoundedButton();
+
+		JButton exportButton = createRoundedButton.createRoundedButton("Xuất báo cáo", "/icon/printer.png", true);
+		configureButtonWithPermission(exportButton, UserSession.getInstance().getCurrentUser().getUserID(),
+				PermissionChecker.PERM_REPORT, () -> handleProductExport());
+
+		panel.add(exportButton);
+		return panel;
+	}
+
+	private JPanel createRevenueTablePanel() {
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.setBackground(Color.WHITE);
+
+		// Initialize table model with columns
+		String[] columns = { "Ngày", "Số đơn hàng", "Doanh thu", "Lợi nhuận" };
+		revenueTableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		revenueTable = new JTable(revenueTableModel);
+		setupTable(revenueTable);
+
+		JScrollPane scrollPane = new JScrollPane(revenueTable);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+		scrollPane.setVerticalScrollBarUI(new CustomScrollBarUI());
+
+		panel.add(scrollPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private JPanel createProductTablePanel() {
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.setBackground(Color.WHITE);
+
+		// Initialize table model with columns
+		String[] columns = { "Mã SP", "Tên sản phẩm", "Số lượng bán", "Doanh thu", "Lợi nhuận" };
+		productTableModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		productTable = new JTable(productTableModel);
+		setupTable(productTable);
+
+		JScrollPane scrollPane = new JScrollPane(productTable);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+		scrollPane.setVerticalScrollBarUI(new CustomScrollBarUI());
+
+		panel.add(scrollPane, BorderLayout.CENTER);
+		return panel;
+	}
+
+	private void setupTable(JTable table) {
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(30);
+		table.setGridColor(new Color(245, 245, 245));
+		table.setSelectionBackground(new Color(252, 231, 243));
+		table.setSelectionForeground(Color.BLACK);
+
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+	}
+
+	private void loadInitialData() {
+		// Load revenue data
+		updateRevenueChart();
+		updateRevenueTable();
+
+		// Load product data
+		updateProductChart();
+		updateProductTable();
+	}
+
+	private void updateRevenueChart() {
+		DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+		// Add sample data or real data from database
+		List<DonHang> orders = donHangBUS.getAllDonHang();
+
+		// Process orders and add to dataset
+		// This is a simplified example - you'll need to aggregate by date
+		orders.forEach(order -> {
+			dataset.addValue(order.getTongTien(), "Doanh thu",
+					order.getNgayDat().format(DateTimeFormatter.ofPattern("dd/MM")));
+		});
+
+		JFreeChart chart = ChartFactory.createLineChart("Biểu đồ doanh thu", "Ngày", "Doanh thu (VNĐ)", dataset,
+				PlotOrientation.VERTICAL, true, true, false);
+
+		ChartPanel chartPanel = new ChartPanel(chart);
+		revenueChartPanel.removeAll();
+		revenueChartPanel.add(chartPanel);
+		revenueChartPanel.revalidate();
+	}
+
+	private void updateProductChart() {
+		DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+		// Add product statistics data
+		// Similar to revenue chart but with product-specific data
+
+		JFreeChart chart = ChartFactory.createBarChart("Thống kê sản phẩm bán chạy", "Sản phẩm", "Số lượng bán",
+				dataset, PlotOrientation.VERTICAL, true, true, false);
+
+		ChartPanel chartPanel = new ChartPanel(chart);
+		productChartPanel.removeAll();
+		productChartPanel.add(chartPanel);
+		productChartPanel.revalidate();
+	}
+
+	private void updateRevenueTable() {
+		revenueTableModel.setRowCount(0);
+		// Add data to revenue table
+		// This would typically come from your database
+	}
+
+	private void updateProductTable() {
+		productTableModel.setRowCount(0);
+		// Add data to product table
+		// This would typically come from your database
+	}
+
+	private void handleRevenueSearch() {
+		LocalDate startDate = startDateChooser.getDate().toInstant().atZone(java.time.ZoneId.systemDefault())
+				.toLocalDate();
+		LocalDate endDate = endDateChooser.getDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+
+		// Update chart and table with filtered data
+		updateRevenueChart();
+		updateRevenueTable();
+	}
+
+	private void handleRevenueExport() {
+		exportToExcel(revenueTable, "revenue_report.xlsx");
+	}
+
+	private void handleProductExport() {
+		exportToExcel(productTable, "product_report.xlsx");
+	}
+
+	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
+		if (PermissionChecker.hasPermission(userId, permission)) {
+			button.setEnabled(true);
+			button.addActionListener(e -> {
+				if (button.isEnabled()) {
+					action.run();
+				}
+			});
+		} else {
+			button.setEnabled(false);
+			String permissionDesc = PermissionChecker.getPermissionDescription(permission);
+			button.setToolTipText("Bạn không có quyền " + permissionDesc);
+		}
+	}
+
+	private void exportToExcel(JTable table, String fileName) {
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setDialogTitle("Chọn vị trí lưu file");
+
+		if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+			String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+			if (!filePath.endsWith(".xlsx")) {
+				filePath += ".xlsx";
+			}
+
+			try (FileWriter writer = new FileWriter(filePath)) {
+				// Write HTML-style report
+				writer.write("<html><head><style>");
+				writer.write("table { border-collapse: collapse; width: 100%; }");
+				writer.write("th, td { border: 1px solid black; padding: 8px; }");
+				writer.write("</style></head><body>");
+
+				// Write table content
+				writer.write("<table>");
+				// Add headers
+				writer.write("<tr>");
+				for (int i = 0; i < table.getColumnCount(); i++) {
+					writer.write("<th>" + table.getColumnName(i) + "</th>");
+				}
+				writer.write("</tr>");
+
+				// Add data
+				for (int i = 0; i < table.getRowCount(); i++) {
+					writer.write("<tr>");
+					for (int j = 0; j < table.getColumnCount(); j++) {
+						writer.write("<td>" + table.getValueAt(i, j) + "</td>");
+					}
+					writer.write("</tr>");
+				}
+
+				writer.write("</table></body></html>");
+				JOptionPane.showMessageDialog(this, "Xuất báo cáo thành công!", "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+
+			} catch (IOException e) {
+				LOGGER.severe("Lỗi khi xuất báo cáo: " + e.getMessage());
+				JOptionPane.showMessageDialog(this, "Lỗi khi xuất báo cáo: " + e.getMessage(), "Lỗi",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	// Format currency values for display
+	private String formatCurrency(double amount) {
+		DecimalFormat formatter = new DecimalFormat("#,###");
+		return formatter.format(amount) + " VNĐ";
+	}
+
+	// Helper method to calculate revenue statistics
+	private void calculateRevenueStats(LocalDate startDate, LocalDate endDate) {
+		revenueTableModel.setRowCount(0);
+		double totalRevenue = 0;
+		int totalOrders = 0;
+
+		List<DonHang> orders = donHangBUS.getDonHangBetweenDates(startDate, endDate);
+
+		// Group orders by date and calculate daily statistics
+		orders.stream().collect(Collectors.groupingBy(order -> order.getNgayDat())).forEach((date, dailyOrders) -> {
+			double dailyRevenue = dailyOrders.stream().mapToDouble(DonHang::getTongTien).sum();
+			double dailyProfit = calculateDailyProfit(dailyOrders);
+
+			Object[] row = { date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")), dailyOrders.size(),
+					formatCurrency(dailyRevenue), formatCurrency(dailyProfit) };
+			revenueTableModel.addRow(row);
+		});
+
+		// Update revenue chart
+		updateRevenueChartWithDateRange(startDate, endDate);
+	}
+
+	// Calculate profit for a list of orders
+	private double calculateDailyProfit(List<DonHang> orders) {
+		return orders.stream().mapToDouble(this::calculateOrderProfit).sum();
+	}
+
+	// Calculate profit for a single order
+	private double calculateOrderProfit(DonHang order) {
+		// Implement profit calculation logic based on your business rules
+		// This is a simplified example
+		return order.getTongTien() * 0.2; // Assuming 20% profit margin
+	}
+
+	// Update revenue chart with date range
+	private void updateRevenueChartWithDateRange(LocalDate startDate, LocalDate endDate) {
+		DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+		List<DonHang> orders = donHangBUS.getDonHangBetweenDates(startDate, endDate);
+
+		// Group and aggregate data by date
+		Map<LocalDate, Double> dailyRevenue = orders.stream().collect(
+				Collectors.groupingBy(order -> order.getNgayDat(), Collectors.summingDouble(DonHang::getTongTien)));
+
+		// Add data to chart dataset
+		dailyRevenue.forEach((date, revenue) -> {
+			dataset.addValue(revenue, "Doanh thu", date.format(DateTimeFormatter.ofPattern("dd/MM")));
+		});
+
+		// Create and customize the chart
+		JFreeChart chart = ChartFactory.createLineChart(
+				"Biểu đồ doanh thu từ " + startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + " đến "
+						+ endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+				"Ngày", "Doanh thu (VNĐ)", dataset, PlotOrientation.VERTICAL, true, true, false);
+
+		// Customize chart appearance
+		chart.getPlot().setBackgroundPaint(Color.WHITE);
+		chart.setBackgroundPaint(Color.WHITE);
+
+		// Update chart panel
+		ChartPanel chartPanel = new ChartPanel(chart);
+		chartPanel.setPreferredSize(new Dimension(revenueChartPanel.getWidth(), 300));
+		revenueChartPanel.removeAll();
+		revenueChartPanel.add(chartPanel);
+		revenueChartPanel.revalidate();
+	}
+
+	// Calculate and update product statistics
+	private void updateProductStatistics() {
+		productTableModel.setRowCount(0);
+		DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+		// Get product sales statistics from database
+		List<ProductSalesStatistic> productStats = donHangBUS.getProductSalesStatistics();
+
+		// Update table and chart
+		productStats.forEach(stat -> {
+			Object[] row = { stat.getProductId(), stat.getProductName(), stat.getQuantitySold(),
+					formatCurrency(stat.getRevenue()), formatCurrency(stat.getProfit()) };
+			productTableModel.addRow(row);
+
+			// Add to chart dataset
+			dataset.addValue(stat.getQuantitySold(), "Số lượng bán", stat.getProductName());
+		});
+
+		// Create and update product chart
+		JFreeChart chart = ChartFactory.createBarChart("Top sản phẩm bán chạy", "Sản phẩm", "Số lượng bán", dataset,
+				PlotOrientation.VERTICAL, true, true, false);
+
+		// Customize chart appearance
+		chart.getPlot().setBackgroundPaint(Color.WHITE);
+		chart.setBackgroundPaint(Color.WHITE);
+
+		// Update chart panel
+		ChartPanel chartPanel = new ChartPanel(chart);
+		chartPanel.setPreferredSize(new Dimension(productChartPanel.getWidth(), 300));
+		productChartPanel.removeAll();
+		productChartPanel.add(chartPanel);
+		productChartPanel.revalidate();
+	}
+
+	// Inner class to hold product statistics
+	private class ProductSalesStatistic {
+		private String productId;
+		private String productName;
+		private int quantitySold;
+		private double revenue;
+		private double profit;
+
+		// Constructor and getter/setter methods
+		// ... (implement as needed)
+	}
+}

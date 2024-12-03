@@ -1,0 +1,78 @@
+package entity;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+import dialog.ChiTietPhieuNhap;
+
+public class DonHang {
+    private String donHangID;
+    private LocalDate ngayDat;
+    private String nhanVienID;
+    private double tongTien;
+    private String phuongThucThanhToan;
+    private String trangThai;
+    private List<ChiTietPhieuNhap> chiTietDonHang;
+
+    // Constructor with essential fields
+    public DonHang(String donHangID, LocalDate ngayDat, String nhanVienID, double tongTien, String phuongThucThanhToan) {
+        this.donHangID = donHangID;
+        this.ngayDat = ngayDat;
+        this.nhanVienID = nhanVienID;
+        this.tongTien = tongTien;
+        this.phuongThucThanhToan = phuongThucThanhToan;
+        this.trangThai = "Mới";
+        this.chiTietDonHang = new ArrayList<>();
+    }
+
+    // Full constructor
+    public DonHang(String donHangID, LocalDate ngayDat, String nhanVienID, double tongTien, 
+                  String phuongThucThanhToan, String trangThai, List<ChiTietDonHang> chiTietDonHang) {
+        this.donHangID = donHangID;
+        this.ngayDat = ngayDat;
+        this.nhanVienID = nhanVienID;
+        this.tongTien = tongTien;
+        this.phuongThucThanhToan = phuongThucThanhToan;
+        this.trangThai = trangThai;
+        this.chiTietDonHang = chiTietDonHang != null ? chiTietDonHang : new ArrayList<>();
+    }
+
+    // Getters and Setters
+    public String getDonHangID() { return donHangID; }
+    public void setDonHangID(String donHangID) { this.donHangID = donHangID; }
+
+    public LocalDate getNgayDat() { return ngayDat; }
+    public void setNgayDat(LocalDate ngayDat) { this.ngayDat = ngayDat; }
+
+    public String getNhanVienID() { return nhanVienID; }
+    public void setNhanVienID(String nhanVienID) { this.nhanVienID = nhanVienID; }
+
+    public double getTongTien() { return tongTien; }
+    public void setTongTien(double tongTien) { this.tongTien = tongTien; }
+
+    public String getPhuongThucThanhToan() { return phuongThucThanhToan; }
+    public void setPhuongThucThanhToan(String phuongThucThanhToan) { this.phuongThucThanhToan = phuongThucThanhToan; }
+
+    public String getTrangThai() { return trangThai; }
+    public void setTrangThai(String trangThai) { this.trangThai = trangThai; }
+
+    public List<ChiTietDonHang> getChiTietDonHang() { return chiTietDonHang; }
+    public void setChiTietDonHang(List<ChiTietDonHang> chiTietDonHang) { this.chiTietDonHang = chiTietDonHang; }
+
+    // Helper methods
+    public void addChiTietDonHang(ChiTietDonHang chiTiet) {
+        if (chiTietDonHang == null) {
+            chiTietDonHang = new ArrayList<>();
+        }
+        chiTietDonHang.add(chiTiet);
+        // Recalculate total amount
+        calculateTongTien();
+    }
+
+    public void calculateTongTien() {
+        this.tongTien = chiTietDonHang.stream()
+                            .mapToDouble(ct -> ct.getDonGia() * ct.getSoLuong())
+                            .sum();
+    }
+}

@@ -1,0 +1,31 @@
+package gui;
+
+import java.awt.BorderLayout;
+
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+
+public class Form_ThongKe extends JPanel {
+	 private JPanel overviewPanel;
+	    private JPanel chartsPanel;
+	    private JTabbedPane tabsPanel;
+	    private JTable productTable;
+	    private JTable customerTable;
+	    
+	public Form_ThongKe() {
+		// TODO Auto-generated constructor stub
+		setLayout(new BorderLayout());
+        setBorder(new EmptyBorder(20, 20, 20, 20));
+
+        // Tạo các panel chính
+        overviewPanel = createOverviewPanel();
+        chartsPanel = createChartsPanel();
+        tabsPanel = createTabsPanel();
+
+        // Thêm các panel vào giao diện chính
+        add(overviewPanel, BorderLayout.NORTH);
+        add(chartsPanel, BorderLayout.CENTER);
+        add(tabsPanel, BorderLayout.SOUTH);
+	}
+}

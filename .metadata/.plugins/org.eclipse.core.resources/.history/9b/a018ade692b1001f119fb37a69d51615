@@ -1,0 +1,9 @@
+package gui;
+
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+
+public class Form_ThongKe extends JPanel {
+	
+}

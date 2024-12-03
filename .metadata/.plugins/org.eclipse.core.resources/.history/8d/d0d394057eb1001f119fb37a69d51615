@@ -1,0 +1,15 @@
+package gui;
+
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+
+public class Form_ThongKe extends JPanel {
+	 private JPanel overviewPanel;
+	    private JPanel chartsPanel;
+	    private JTabbedPane tabsPanel;
+	    private JTable productTable;
+	    private JTable customerTable;
+
+	
+}
