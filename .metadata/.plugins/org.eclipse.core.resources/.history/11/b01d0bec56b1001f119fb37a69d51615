@@ -1,0 +1,375 @@
+package dialog;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.logging.Logger;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+
+import bus.ImportBUS;
+import dao.ImportDetailDAO;
+import entity.Import;
+import entity.ImportDetail;
+import style.StyleButton;
+
+public class ChiTietPhieuNhap extends JDialog {
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color CONTENT_COLOR = new Color(255, 242, 242);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 14);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+	private static final Font TITLE_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 16);
+
+	private ImportBUS importBUS;
+	private JTable table;
+	private JLabel lblMaPhieu, lblNhaCungCap, lblNhanVien, lblNgayNhap, lblTongTien;
+	// Add logging
+	private static final Logger LOGGER = Logger.getLogger(ChiTietPhieuNhap.class.getName());
+
+	public ChiTietPhieuNhap() {
+		// TODO Auto-generated constructor stub
+		importBUS = new ImportBUS();
+		setTitle("Chi Tiết Phiếu Nhập");
+		setSize(800, 600);
+		setLocationRelativeTo(null);
+		setModal(true);
+	}
+
+	public void chiTietPhieuNhap(JTable sourceTable, DefaultTableModel detailModel) {
+		// If a row is selected, get the import ID
+		int selectedRow = sourceTable.getSelectedRow();
+		if (selectedRow == -1) {
+			JOptionPane.showMessageDialog(this, "Vui lòng chọn một phiếu nhập để xem chi tiết", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		String importId = sourceTable.getValueAt(selectedRow, 0).toString();
+
+		try {
+			// Fetch import details from database
+			Import importOrder = importBUS.getImportById(importId);
+
+			// Setup the dialog layout
+			setLayout(new BorderLayout(10, 10));
+
+			// Create info panel
+			JPanel infoPanel = createInfoPanel(importOrder);
+			add(infoPanel, BorderLayout.NORTH);
+
+			// Create table panel
+			JScrollPane tablePanel = createTablePanel(importId);
+			add(tablePanel, BorderLayout.CENTER);
+
+			// Show dialog
+			setVisible(true);
+
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải chi tiết phiếu nhập: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private JPanel createInfoPanel(Import importOrder) {
+		JPanel infoPanel = new JPanel(new GridLayout(5, 2, 10, 10));
+		infoPanel.setBorder(BorderFactory.createTitledBorder("Thông Tin Phiếu Nhập"));
+
+		NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
+		SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+
+		// Labels for import order details
+		lblMaPhieu = new JLabel("Mã Phiếu: " + importOrder.getImportID());
+		lblNhaCungCap = new JLabel("Nhà Cung Cấp: " + importOrder.getSupplier());
+		lblNhanVien = new JLabel("Nhân Viên: " + importOrder.getStaff());
+		lblNgayNhap = new JLabel("Ngày Nhập: " + dateFormat.format(importOrder.getImportDate()));
+		lblTongTien = new JLabel("Tổng Tiền: " + currencyFormat.format(importOrder.getTotalAmount()));
+
+		infoPanel.add(lblMaPhieu);
+		infoPanel.add(lblNhaCungCap);
+		infoPanel.add(lblNhanVien);
+		infoPanel.add(lblNgayNhap);
+		infoPanel.add(lblTongTien);
+
+		return infoPanel;
+	}
+
+	private JScrollPane createTablePanel(String importId) {
+		// Create table model for details
+		String[] columns = { "Mã SP", "Tên Sản Phẩm", "Phân Loại", "Đơn Giá", "Số Lượng", "Thành Tiền" };
+		DefaultTableModel detailModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false;
+			}
+		};
+
+		// Fetch import details
+		ImportDetailDAO detailDAO = new ImportDetailDAO();
+		List<ImportDetail> details = detailDAO.getImportDetailsByImportID(importId);
+
+		NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
+
+		// Populate table model (you'll need to enhance this with actual product
+		// details)
+		for (ImportDetail detail : details) {
+			// Note: You'll want to join with ProductVariant and Product tables to get full
+			// details
+			Object[] row = { detail.getVariantID(), "Tên SP Chưa Có", // Placeholder - replace with actual product name
+					"Chi Tiết Chưa Có", // Placeholder - replace with variant details
+					currencyFormat.format(detail.getPrice()), detail.getQuantity(),
+					currencyFormat.format(detail.getPrice() * detail.getQuantity()) };
+			detailModel.addRow(row);
+		}
+
+		// Create table and scroll pane
+		JTable detailTable = new JTable(detailModel);
+		detailTable.setRowHeight(30);
+		JScrollPane scrollPane = new JScrollPane(detailTable);
+		scrollPane.setBorder(BorderFactory.createTitledBorder("Chi Tiết Sản Phẩm"));
+
+		return scrollPane;
+	}
+
+	private JTable createDetailTable(DefaultTableModel detailModel) {
+		// Create the table with the provided model
+		JTable detailTable = new JTable(detailModel);
+
+		// Apply basic table styling for a professional look
+		detailTable.setFont(CONTENT_FONT);
+		detailTable.setRowHeight(35); // Make rows more readable
+		detailTable.setGridColor(new Color(230, 230, 230)); // Subtle grid lines
+		detailTable.setShowVerticalLines(true);
+		detailTable.setShowHorizontalLines(true);
+
+		// Configure the table header for better visibility
+		JTableHeader header = detailTable.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+
+		// Create cell renderers for different types of data
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+		rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
+
+		// Apply appropriate alignment for each column based on its content type
+		detailTable.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // Product ID centered
+		detailTable.getColumnModel().getColumn(1).setCellRenderer(centerRenderer); // Product name centered
+		detailTable.getColumnModel().getColumn(2).setCellRenderer(centerRenderer); // Variant centered
+		detailTable.getColumnModel().getColumn(3).setCellRenderer(rightRenderer); // Price right-aligned
+		detailTable.getColumnModel().getColumn(4).setCellRenderer(centerRenderer); // Quantity centered
+		detailTable.getColumnModel().getColumn(5).setCellRenderer(rightRenderer); // Total amount right-aligned
+
+		// Set preferred column widths for better data presentation
+		detailTable.getColumnModel().getColumn(0).setPreferredWidth(100); // Product ID
+		detailTable.getColumnModel().getColumn(1).setPreferredWidth(200); // Product name
+		detailTable.getColumnModel().getColumn(2).setPreferredWidth(120); // Variant
+		detailTable.getColumnModel().getColumn(3).setPreferredWidth(120); // Price
+		detailTable.getColumnModel().getColumn(4).setPreferredWidth(80); // Quantity
+		detailTable.getColumnModel().getColumn(5).setPreferredWidth(120); // Total amount
+
+		// Disable column reordering for consistent display
+		detailTable.getTableHeader().setReorderingAllowed(false);
+
+		// Enable row selection but disable column selection
+		detailTable.setRowSelectionAllowed(true);
+		detailTable.setColumnSelectionAllowed(false);
+
+		// Set selection mode to single selection
+		detailTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+		// Add alternating row colors for better readability
+		detailTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+				if (!isSelected) {
+					c.setBackground(row % 2 == 0 ? Color.WHITE : new Color(250, 250, 250));
+				}
+
+				return c;
+			}
+		});
+
+		return detailTable;
+	}
+
+	private String getTableValueSafely(JTable table, int row, int column) {
+		Object value = table.getValueAt(row, column);
+		return value != null ? value.toString() : "";
+	}
+
+	private JDialog createDetailDialog() {
+		JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Chi tiết phiếu nhập", true);
+		dialog.setLayout(new BorderLayout());
+		return dialog;
+	}
+
+	private JPanel createContentPanel() {
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new EmptyBorder(20, 30, 20, 30));
+		return panel;
+	}
+
+	private JPanel createInfoPanel(String maPhieu, String nhaCungCap, String nhanVien, String thoiGian,
+			String tongTien) {
+		JPanel panel = new JPanel(new GridBagLayout());
+		panel.setBackground(Color.WHITE);
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.anchor = GridBagConstraints.WEST;
+		gbc.insets = new Insets(5, 5, 5, 15);
+
+		addDetailField(panel, "Mã phiếu:", maPhieu, gbc, 0);
+		addDetailField(panel, "Nhà cung cấp:", nhaCungCap, gbc, 1);
+		addDetailField(panel, "Nhân viên:", nhanVien, gbc, 2);
+		addDetailField(panel, "Thời gian:", thoiGian, gbc, 3);
+		addDetailField(panel, "Tổng tiền:", tongTien, gbc, 4);
+
+		return panel;
+	}
+
+	private JPanel createDetailTablePanel(JTable detailTable) {
+		JPanel tablePanel = new JPanel(new BorderLayout());
+		tablePanel.setBackground(Color.WHITE);
+
+		JLabel detailLabel = new JLabel("Chi tiết sản phẩm");
+		detailLabel.setFont(HEADER_FONT);
+		detailLabel.setForeground(PRIMARY_COLOR);
+		tablePanel.add(detailLabel, BorderLayout.NORTH);
+
+		JScrollPane scrollPane = new JScrollPane(detailTable);
+		scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230, 230, 230)));
+		customizeScrollPane(scrollPane);
+
+		tablePanel.add(Box.createVerticalStrut(10), BorderLayout.CENTER);
+		tablePanel.add(scrollPane, BorderLayout.SOUTH);
+
+		return tablePanel;
+	}
+
+	private void customizeScrollPane(JScrollPane scrollPane) {
+		scrollPane.getVerticalScrollBar().setUI(new BasicScrollBarUI() {
+			@Override
+			protected void configureScrollBarColors() {
+				this.thumbColor = PRIMARY_COLOR;
+				this.trackColor = new Color(245, 245, 245);
+			}
+		});
+	}
+
+	private JPanel createButtonPanel(JDialog dialog, String maPhieu) {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+		panel.setBackground(Color.WHITE);
+
+		StyleButton styleButton = new StyleButton();
+
+		JButton printButton = new JButton("In phiếu");
+		styleButton.styleButton(printButton, true);
+		printButton.addActionListener(e -> handlePrintButton(dialog, maPhieu));
+
+		JButton closeButton = new JButton("Đóng");
+		styleButton.styleButton(closeButton, false);
+		closeButton.addActionListener(e -> dialog.dispose());
+
+		panel.add(printButton);
+		panel.add(closeButton);
+
+		return panel;
+	}
+
+	private void handlePrintButton(JDialog dialog, String maPhieu) {
+		try {
+			// TODO: Implement actual printing functionality
+			JOptionPane.showMessageDialog(dialog, "Đang in phiếu " + maPhieu, "Thông báo",
+					JOptionPane.INFORMATION_MESSAGE);
+			LOGGER.info("Print requested for import ID: " + maPhieu);
+		} catch (Exception e) {
+			LOGGER.severe("Error printing import: " + e.getMessage());
+			JOptionPane.showMessageDialog(dialog, "Lỗi khi in phiếu: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void addDetailField(JPanel panel, String label, String value, GridBagConstraints gbc, int row) {
+		gbc.gridy = row;
+
+		// Label
+		gbc.gridx = 0;
+		JLabel lblField = new JLabel(label);
+		lblField.setFont(CONTENT_FONT);
+		panel.add(lblField, gbc);
+
+		// Value
+		gbc.gridx = 1;
+		JLabel lblValue = new JLabel(value);
+		lblValue.setFont(CONTENT_FONT);
+		panel.add(lblValue, gbc);
+	}
+
+	private void setupDetailTable(JTable table) {
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(35);
+		table.setGridColor(new Color(230, 230, 230));
+		table.setShowVerticalLines(true);
+		table.setShowHorizontalLines(true);
+
+		// Setup header
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+
+		// Setup cell renderers
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+		rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
+
+		// Áp dụng cell renderer
+		table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // Mã SP
+		table.getColumnModel().getColumn(3).setCellRenderer(rightRenderer); // Đơn giá
+		table.getColumnModel().getColumn(4).setCellRenderer(centerRenderer); // Số lượng
+		table.getColumnModel().getColumn(5).setCellRenderer(rightRenderer); // Thành tiền
+	}
+
+}

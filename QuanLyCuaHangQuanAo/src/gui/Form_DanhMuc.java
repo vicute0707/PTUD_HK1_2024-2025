@@ -5,10 +5,14 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.basic.BasicScrollBarUI;
@@ -16,6 +20,9 @@ import javax.swing.table.*;
 import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
 
 import bus.DanhMucBUS;
+import bus.SanPhamBUS;
+import component.ImagePanel;
+import component.ProductCardImageLoader;
 import entity.DanhMuc;
 import entity.NhaCC;
 import entity.SanPham;
@@ -38,168 +45,82 @@ public class Form_DanhMuc extends JPanel {
 	private JPanel productsPanel;
 	private static final Logger LOGGER = Logger.getLogger(Form_DanhMuc.class.getName());
 	private DanhMucBUS danhMucBUS;
-
-	private class ImagePanel extends JPanel {
-		private Image image;
-		private int width;
-		private int height;
-
-		public ImagePanel(String imagePath, int width, int height) {
-			this.width = width;
-			this.height = height;
-			try {
-				image = new ImageIcon(getClass().getResource(imagePath)).getImage().getScaledInstance(width, height,
-						Image.SCALE_SMOOTH);
-			} catch (Exception e) {
-				image = createDefaultImage(width, height);
-			}
-			setPreferredSize(new Dimension(width, height));
-		}
-
-		private Image createDefaultImage(int width, int height) {
-			BufferedImage defaultImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-			Graphics2D g2d = defaultImage.createGraphics();
-			g2d.setColor(new Color(240, 240, 240));
-			g2d.fillRect(0, 0, width, height);
-			g2d.setColor(Color.GRAY);
-			g2d.drawRect(0, 0, width - 1, height - 1);
-			g2d.drawString("No Image", width / 4, height / 2);
-			g2d.dispose();
-			return defaultImage;
-		}
-
-		@Override
-		protected void paintComponent(Graphics g) {
-			super.paintComponent(g);
-			if (image != null) {
-				int x = (getWidth() - width) / 2;
-				int y = (getHeight() - height) / 2;
-				g.drawImage(image, x, y, null);
-			}
-		}
-	}
+	private SanPhamBUS sanPhamBUS;
+	private static final String IMAGE_DIRECTORY = "src/img_product";
+	private static final String DEFAULT_IMAGE_NAME = "default-product.jpg";
 
 	public Form_DanhMuc() {
 		danhMucBUS = new DanhMucBUS();
+		sanPhamBUS = new SanPhamBUS();
+
 		initComponents();
 		danhMucBUS.hienThiDanhMuc(tableModel);
+
 	}
 
 	private void initComponents() {
+		// Set up the main panel layout with a 10-pixel horizontal gap
 		setLayout(new BorderLayout(10, 0));
 		setBackground(Color.WHITE);
+		// Add padding around the entire form
 		setBorder(new EmptyBorder(30, 30, 30, 30));
 
-		// Tạo panel chính chứa table
+		// Create the main panel that will contain the category table
+		// Using BorderLayout for flexible resizing and 20-pixel gaps between components
 		JPanel mainPanel = new JPanel(new BorderLayout(20, 0));
 		mainPanel.setBackground(Color.WHITE);
+		// Set the main panel to take up 70% of the total width
 		mainPanel.setPreferredSize(new Dimension(getWidth() * 7 / 10, getHeight()));
 
-		// Panel bên trái chứa danh mục
+		// Create the left panel for category management
 		JPanel leftPanel = new JPanel(new BorderLayout(0, 20));
 		leftPanel.setBackground(Color.WHITE);
 
+		// Add the top control panel (search and buttons) and table to the left panel
 		leftPanel.add(createTopPanel(), BorderLayout.NORTH);
 		leftPanel.add(createTablePanel(), BorderLayout.CENTER);
 		mainPanel.add(leftPanel, BorderLayout.CENTER);
 
-		// Panel bên phải để hiển thị sản phẩm
+		// Create the right panel for displaying products
 		rightPanel = new JPanel(new BorderLayout());
 		rightPanel.setBackground(Color.WHITE);
+		// Add a subtle border to separate it from the main panel
 		rightPanel.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+		// Set the right panel to a fixed width of 320 pixels
 		rightPanel.setPreferredSize(new Dimension(320, getHeight()));
 
-		// Panel chứa tiêu đề
+		// Create the title panel for the products section
 		JPanel titlePanel = new JPanel(new BorderLayout());
 		titlePanel.setBackground(Color.WHITE);
 		titlePanel.setBorder(new EmptyBorder(15, 20, 15, 20));
+
+		// Add the "Danh sách sản phẩm" title with custom font
 		JLabel titleLabel = new JLabel("Danh sách sản phẩm");
 		titleLabel.setFont(TITLE_FONT);
 		titlePanel.add(titleLabel, BorderLayout.WEST);
 
-		// Panel chứa danh sách sản phẩm
+		// Create the panel that will hold the product cards
 		productsPanel = new JPanel();
 		productsPanel.setBackground(Color.WHITE);
+		// Use BoxLayout for vertical stacking of product cards
 		productsPanel.setLayout(new BoxLayout(productsPanel, BoxLayout.Y_AXIS));
 		productsPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
+		// Create a scroll pane for the products panel
 		JScrollPane scrollPane = new JScrollPane(productsPanel);
-		scrollPane.setBorder(null);
+		scrollPane.setBorder(null); // Remove the default border
+		// Prevent horizontal scrolling since cards will have fixed width
 		scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		// Add custom styling to the scroll bar
 		scrollPane.getVerticalScrollBar().setUI(new CustomScrollBarUI());
 
+		// Assemble the right panel
 		rightPanel.add(titlePanel, BorderLayout.NORTH);
 		rightPanel.add(scrollPane, BorderLayout.CENTER);
 
+		// Add both main panels to the form
 		add(mainPanel, BorderLayout.CENTER);
 		add(rightPanel, BorderLayout.EAST);
-	}
-
-	private JPanel createProductCard(String name, int quantity, String imagePath) {
-		JPanel card = new JPanel(new BorderLayout(10, 10));
-		card.setBackground(Color.WHITE);
-		card.setBorder(BorderFactory.createCompoundBorder(new LineBorder(new Color(245, 245, 245), 1, true),
-				new EmptyBorder(10, 10, 10, 10)));
-		card.setMaximumSize(new Dimension(260, 100));
-		card.setPreferredSize(new Dimension(260, 100));
-
-		// Image panel
-		ImagePanel imagePanel = new ImagePanel(imagePath, 80, 80);
-		imagePanel.setBackground(Color.WHITE);
-		JPanel imageContainer = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-		imageContainer.setBackground(Color.WHITE);
-		imageContainer.add(imagePanel);
-
-		// Info panel
-		JPanel infoPanel = new JPanel();
-		infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-		infoPanel.setBackground(Color.WHITE);
-
-		JLabel nameLabel = new JLabel(name);
-		nameLabel.setFont(new Font(FlatRobotoFont.FAMILY, Font.BOLD, 13));
-		nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-		JLabel quantityLabel = new JLabel("Số lượng: " + quantity);
-		quantityLabel.setFont(CONTENT_FONT);
-		quantityLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-		infoPanel.setBorder(new EmptyBorder(5, 10, 5, 5));
-		infoPanel.add(nameLabel);
-		infoPanel.add(Box.createRigidArea(new Dimension(0, 5)));
-		infoPanel.add(quantityLabel);
-
-		card.add(imageContainer, BorderLayout.WEST);
-		card.add(infoPanel, BorderLayout.CENTER);
-
-		// Hover effect
-		MouseAdapter hoverAdapter = new MouseAdapter() {
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				card.setBackground(HOVER_COLOR);
-				imageContainer.setBackground(HOVER_COLOR);
-				infoPanel.setBackground(HOVER_COLOR);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				card.setBackground(Color.WHITE);
-				imageContainer.setBackground(Color.WHITE);
-				infoPanel.setBackground(Color.WHITE);
-			}
-		};
-
-		card.addMouseListener(hoverAdapter);
-		imageContainer.addMouseListener(hoverAdapter);
-		infoPanel.addMouseListener(hoverAdapter);
-
-		// Wrapper panel
-		JPanel wrapperPanel = new JPanel();
-		wrapperPanel.setLayout(new BoxLayout(wrapperPanel, BoxLayout.Y_AXIS));
-		wrapperPanel.setBackground(Color.WHITE);
-		wrapperPanel.add(card);
-		wrapperPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-
-		return wrapperPanel;
 	}
 
 	private JPanel createTopPanel() {
@@ -222,6 +143,7 @@ public class Form_DanhMuc extends JPanel {
 			public void keyReleased(KeyEvent e) {
 				String keyword = searchField.getText().trim();
 				performSearch(keyword);
+				updateProductsForSearch(keyword);
 			}
 		});
 
@@ -298,6 +220,104 @@ public class Form_DanhMuc extends JPanel {
 		return topPanel;
 	}
 
+	private void updateProductsForSearch(String searchText) {
+		if (searchText == null || searchText.trim().isEmpty() || searchText.equals("Tìm kiếm danh mục...")) {
+			productsPanel.removeAll();
+			productsPanel.revalidate();
+			productsPanel.repaint();
+			return;
+		}
+
+		try {
+			List<SanPham> searchResults = sanPhamBUS.searchProductsByName(searchText);
+			productsPanel.removeAll();
+
+			if (searchResults.isEmpty()) {
+				JLabel noResultsLabel = new JLabel("Không tìm thấy sản phẩm");
+				noResultsLabel.setFont(CONTENT_FONT);
+				noResultsLabel.setForeground(Color.GRAY);
+				noResultsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+				productsPanel.add(noResultsLabel);
+			} else {
+				for (SanPham product : searchResults) {
+					JPanel productCard = createProductCard(product);
+					productCard.addMouseListener(new MouseAdapter() {
+						@Override
+						public void mouseClicked(MouseEvent e) {
+							showProductDetails(product);
+						}
+					});
+					productsPanel.add(productCard);
+				}
+			}
+
+			productsPanel.revalidate();
+			productsPanel.repaint();
+		} catch (Exception e) {
+			LOGGER.severe("Error searching products: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "Lỗi khi tìm kiếm sản phẩm: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void showProductDetails(SanPham product) {
+		JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Chi tiết sản phẩm", true);
+		dialog.setLayout(new BorderLayout(10, 10));
+		dialog.setSize(400, 500);
+		dialog.setLocationRelativeTo(null);
+
+		JPanel contentPanel = new JPanel();
+		contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+		contentPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+		contentPanel.setBackground(Color.WHITE);
+
+		// Load and display product image
+		try {
+			String imageName = product.getHinhAnh();
+			Path imagePath = Paths.get(IMAGE_DIRECTORY, imageName != null ? imageName : DEFAULT_IMAGE_NAME);
+
+			if (Files.exists(imagePath)) {
+				BufferedImage img = ImageIO.read(imagePath.toFile());
+				Image scaledImg = img.getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+				JLabel imageLabel = new JLabel(new ImageIcon(scaledImg));
+				imageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+				contentPanel.add(imageLabel);
+			} else {
+				JLabel noImageLabel = new JLabel("No Image Available");
+				noImageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+				contentPanel.add(noImageLabel);
+			}
+		} catch (IOException e) {
+			LOGGER.warning("Error loading product image: " + e.getMessage());
+			JLabel errorLabel = new JLabel("Error loading image");
+			errorLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+			contentPanel.add(errorLabel);
+		}
+
+		// Add product information
+		contentPanel.add(Box.createRigidArea(new Dimension(0, 20)));
+		JLabel nameLabel = new JLabel(product.getTenSP());
+		nameLabel.setFont(new Font(FlatRobotoFont.FAMILY, Font.BOLD, 16));
+		nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		JLabel quantityLabel = new JLabel("Số lượng: " + product.getSoLuongTonKho());
+		quantityLabel.setFont(CONTENT_FONT);
+		quantityLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		contentPanel.add(nameLabel);
+		contentPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+		contentPanel.add(quantityLabel);
+
+		dialog.add(contentPanel);
+		dialog.setVisible(true);
+	}
+
+	private String truncateText(String text, int limit) {
+		if (text.length() <= limit)
+			return text;
+		return text.substring(0, limit - 3) + "...";
+	}
+
 	// Thêm phương thức configureButtonWithPermission
 	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
 		// Check if user has the required permission
@@ -317,40 +337,74 @@ public class Form_DanhMuc extends JPanel {
 
 	// Tách các dialog thành các phương thức riêng
 	private void showAddCategoryDialog() {
-		JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
-		panel.add(new JLabel("Tên danh mục:"));
 		JTextField nameField = new JTextField();
-		panel.add(nameField);
-		panel.add(new JLabel("Ghi chú:"));
-		JTextField noteField = new JTextField();
-		panel.add(noteField);
+        JTextField noteField = new JTextField();
 
-		int result = JOptionPane.showConfirmDialog(this, panel, "Thêm danh mục", JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE);
+        JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+        panel.add(new JLabel("Tên danh mục:"));
+        panel.add(nameField);
+        panel.add(new JLabel("Ghi chú:"));
+        panel.add(noteField);
 
-		if (result == JOptionPane.OK_OPTION) {
-			handleAddCategory(nameField.getText(), noteField.getText());
-		}
+        int result = JOptionPane.showConfirmDialog(this, panel, "Thêm danh mục",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
+            String name = nameField.getText().trim();
+            String note = noteField.getText().trim();
+            
+            if (name.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Tên danh mục không được để trống!");
+                return;
+            }
+
+            if (danhMucBUS.themDanhMuc(name, note)) {
+                loadCategoryData();
+                JOptionPane.showMessageDialog(this, "Thêm danh mục thành công!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Thêm danh mục thất bại!");
+            }
+        }
 	}
 
 	private void showEditCategoryDialog() {
-		String currentName = (String) tableModel.getValueAt(selectedRow, 1);
-		String currentNote = (String) tableModel.getValueAt(selectedRow, 2);
+		if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn danh mục cần sửa!");
+            return;
+        }
 
-		JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
-		panel.add(new JLabel("Chỉnh sửa tên danh mục:"));
-		JTextField nameField = new JTextField(currentName);
-		panel.add(nameField);
-		panel.add(new JLabel("Chỉnh sửa ghi chú:"));
-		JTextField noteField = new JTextField(currentNote);
-		panel.add(noteField);
+        String maDM = (String) table.getValueAt(selectedRow, 0);
+        String currentName = (String) table.getValueAt(selectedRow, 1);
+        String currentNote = (String) table.getValueAt(selectedRow, 2);
 
-		int result = JOptionPane.showConfirmDialog(this, panel, "Chỉnh sửa danh mục", JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE);
+        JTextField nameField = new JTextField(currentName);
+        JTextField noteField = new JTextField(currentNote);
 
-		if (result == JOptionPane.OK_OPTION) {
-			handleEditCategory(nameField.getText(), noteField.getText());
-		}
+        JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+        panel.add(new JLabel("Tên danh mục:"));
+        panel.add(nameField);
+        panel.add(new JLabel("Ghi chú:"));
+        panel.add(noteField);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Sửa danh mục",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
+            String newName = nameField.getText().trim();
+            String newNote = noteField.getText().trim();
+
+            if (newName.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Tên danh mục không được để trống!");
+                return;
+            }
+
+            if (danhMucBUS.suaDanhMuc(maDM, newName, newNote)) {
+                loadCategoryData();
+                JOptionPane.showMessageDialog(this, "Cập nhật danh mục thành công!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Cập nhật danh mục thất bại!");
+            }
+        }
 	}
 
 	private void handleEditCategory(String newName, String newNote) {
@@ -397,15 +451,36 @@ public class Form_DanhMuc extends JPanel {
 	}
 
 	private void showDeleteConfirmDialog() {
-		String maDM = (String) tableModel.getValueAt(selectedRow, 0);
-		int confirm = JOptionPane.showConfirmDialog(this,
-				"Bạn có chắc muốn xóa danh mục này?\nHành động này không thể hoàn tác!", "Xác nhận xóa",
-				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+		if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn danh mục cần xóa!");
+            return;
+        }
 
-		if (confirm == JOptionPane.YES_OPTION) {
-			handleDeleteCategory(maDM);
-		}
+        String maDM = (String) table.getValueAt(selectedRow, 0);
+        String tenDM = (String) table.getValueAt(selectedRow, 1);
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có chắc muốn xóa danh mục '" + tenDM + "'?",
+                "Xác nhận xóa", JOptionPane.YES_NO_OPTION);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (danhMucBUS.xoaDanhMuc(maDM)) {
+                loadCategoryData();
+                JOptionPane.showMessageDialog(this, "Xóa danh mục thành công!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Xóa danh mục thất bại!");
+            }
+        }
 	}
+
+    private void loadCategoryData() {
+        tableModel.setRowCount(0);
+        danhMucBUS.refreshData();
+        for (DanhMuc dm : danhMucBUS.getDanhSachDanhMuc()) {
+            tableModel.addRow(new Object[]{dm.getMaDM(), dm.getTenDM(), dm.getGhiChu()});
+        }
+        selectedRow = -1;
+    }
 
 	// Trong các phương thức xử lý
 	private void handleAddCategory(String name, String note) {
@@ -473,15 +548,14 @@ public class Form_DanhMuc extends JPanel {
 			}
 		}
 
-		// Thêm sự kiện click để hiển thị sản phẩm
 		table.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				selectedRow = table.getSelectedRow();
 				if (selectedRow != -1) {
-					String category = (String) table.getValueAt(selectedRow, 0);
+					String categoryId = (String) table.getValueAt(selectedRow, 0);
 					searchField.setText((String) tableModel.getValueAt(selectedRow, 1));
-
+					updateProductsPanel(categoryId); // Add this line
 				}
 			}
 		});
@@ -515,6 +589,200 @@ public class Form_DanhMuc extends JPanel {
 		tablePanel.add(bottomPanel, BorderLayout.SOUTH);
 
 		return tablePanel;
+	}
+
+	private void updateProductsPanel(String categoryId) {
+		// Clear existing products
+		productsPanel.removeAll();
+
+		if (categoryId == null || categoryId.trim().isEmpty()) {
+			productsPanel.revalidate();
+			productsPanel.repaint();
+			return;
+		}
+
+		try {
+			// Get products for the selected category
+			List<SanPham> products = sanPhamBUS.getSanPhamByCategory(categoryId);
+
+			if (products.isEmpty()) {
+				// Show "no products" message if category is empty
+				JLabel emptyLabel = new JLabel("Không có sản phẩm trong danh mục này");
+				emptyLabel.setFont(CONTENT_FONT);
+				emptyLabel.setForeground(Color.GRAY);
+				emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+				productsPanel.add(emptyLabel);
+			} else {
+				// Add product cards
+				for (SanPham product : products) {
+					JPanel productCard = createProductCard(product);
+					productsPanel.add(productCard);
+
+					// Add some vertical spacing between cards
+					productsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+				}
+			}
+
+			// Update the panel
+			productsPanel.revalidate();
+			productsPanel.repaint();
+
+		} catch (Exception e) {
+			LOGGER.severe("Error loading products: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải sản phẩm: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private JPanel createProductCard(SanPham product) {
+	    // Main card panel
+	    JPanel card = new JPanel(new BorderLayout(10, 10));
+	    card.setBackground(Color.WHITE);
+	    card.setBorder(BorderFactory.createCompoundBorder(
+	        new LineBorder(new Color(245, 245, 245)),
+	        new EmptyBorder(10, 10, 10, 10)
+	    ));
+	    card.setMaximumSize(new Dimension(280, 100));
+	    card.setPreferredSize(new Dimension(280, 100));
+
+	    // Image section
+	    JPanel imagePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+	    imagePanel.setBackground(Color.WHITE);
+	    
+	    // Load and display image
+	    ImageIcon productImage = ProductCardImageLoader.loadProductImage(product.getHinhAnh(), 80, 80);
+	    JLabel imageLabel;
+	    if (productImage != null) {
+	        imageLabel = new JLabel(productImage);
+	    } else {
+	        imageLabel = new JLabel("No Image");
+	        imageLabel.setPreferredSize(new Dimension(80, 80));
+	        imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+	        imageLabel.setBorder(new LineBorder(Color.LIGHT_GRAY));
+	    }
+	    imagePanel.add(imageLabel);
+
+	    // Product information section
+	    JPanel infoPanel = new JPanel();
+	    infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+	    infoPanel.setBackground(Color.WHITE);
+
+	    // Product name
+	    JLabel nameLabel = new JLabel(truncateText(product.getTenSP(), 25));
+	    nameLabel.setFont(new Font(FlatRobotoFont.FAMILY, Font.BOLD, 13));
+	    nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+	    
+	    // Product quantity
+	    JLabel quantityLabel = new JLabel("Số lượng: " + product.getSoLuongTonKho());
+	    quantityLabel.setFont(CONTENT_FONT);
+	    quantityLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+	    quantityLabel.setForeground(getQuantityColor(product.getSoLuongTonKho()));
+
+	    // Add components to info panel
+	    infoPanel.add(nameLabel);
+	    infoPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+	    infoPanel.add(quantityLabel);
+
+	    // Add hover effect
+	    addCardHoverEffect(card, imagePanel, infoPanel);
+
+	    // Assemble the card
+	    card.add(imagePanel, BorderLayout.WEST);
+	    card.add(infoPanel, BorderLayout.CENTER);
+
+	    return card;
+	}
+	private Color getQuantityColor(int quantity) {
+	    if (quantity <= 10) return new Color(220, 38, 38);      // Red for low stock
+	    if (quantity <= 30) return new Color(234, 88, 12);      // Orange for medium stock
+	    return Color.BLACK;                                      // Black for normal stock
+	}
+
+	private void addCardHoverEffect(JPanel card, JPanel... panels) {
+	    MouseAdapter hover = new MouseAdapter() {
+	        @Override
+	        public void mouseEntered(MouseEvent e) {
+	            card.setBackground(HOVER_COLOR);
+	            for (JPanel panel : panels) {
+	                panel.setBackground(HOVER_COLOR);
+	            }
+	        }
+
+	        @Override
+	        public void mouseExited(MouseEvent e) {
+	            card.setBackground(Color.WHITE);
+	            for (JPanel panel : panels) {
+	                panel.setBackground(Color.WHITE);
+	            }
+	        }
+	    };
+
+	    card.addMouseListener(hover);
+	    for (JPanel panel : panels) {
+	        panel.addMouseListener(hover);
+	    }
+	}
+
+
+	private JPanel createProductInfoPanel(SanPham product) {
+		JPanel infoPanel = new JPanel();
+		infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+
+		// Product name with proper truncation and tooltip
+		JLabel nameLabel = new JLabel(truncateText(product.getTenSP(), 25));
+		nameLabel.setFont(new Font(FlatRobotoFont.FAMILY, Font.BOLD, 13));
+		nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		nameLabel.setToolTipText(product.getTenSP());
+
+		// Quantity display with color coding
+		JLabel quantityLabel = createQuantityLabel(product.getSoLuongTonKho());
+		quantityLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		// Add components to info panel
+		infoPanel.add(nameLabel);
+		infoPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+		infoPanel.add(quantityLabel);
+
+		return infoPanel;
+	}
+
+	private JLabel createQuantityLabel(int quantity) {
+		JLabel label = new JLabel("Số lượng: " + quantity);
+		label.setFont(CONTENT_FONT);
+
+		// Color coding based on stock levels
+		if (quantity <= 10) {
+			label.setForeground(new Color(220, 38, 38)); // Red for critically low stock
+		} else if (quantity <= 30) {
+			label.setForeground(new Color(234, 88, 12)); // Orange for low stock
+		} else {
+			label.setForeground(Color.BLACK); // Default color for normal stock
+		}
+
+		return label;
+	}
+
+	private void addHoverEffect(JPanel card, JPanel imageContainer, JPanel infoPanel) {
+		MouseAdapter hoverAdapter = new MouseAdapter() {
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				card.setBackground(HOVER_COLOR);
+				imageContainer.setBackground(HOVER_COLOR);
+				infoPanel.setBackground(HOVER_COLOR);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				card.setBackground(Color.WHITE);
+				imageContainer.setBackground(Color.WHITE);
+				infoPanel.setBackground(Color.WHITE);
+			}
+		};
+
+		// Apply hover effect to all components
+		card.addMouseListener(hoverAdapter);
+		imageContainer.addMouseListener(hoverAdapter);
+		infoPanel.addMouseListener(hoverAdapter);
 	}
 
 	private void refreshTableData() {

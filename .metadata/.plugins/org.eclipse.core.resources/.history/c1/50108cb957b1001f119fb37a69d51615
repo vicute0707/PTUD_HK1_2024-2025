@@ -1,0 +1,73 @@
+package dao;
+
+import entity.ImportDetail;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDetailDAO {
+	private static final Logger LOGGER = Logger.getLogger(ImportDetailDAO.class.getName());
+	private MyConnection myConnection;
+
+	public ImportDetailDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public boolean addImportDetails(List<ImportDetail> details, Connection conn) throws SQLException {
+		String sql = "INSERT INTO importdetail (importID, variantID, quantity, price) VALUES (?, ?, ?, ?)";
+
+		try (PreparedStatement pst = conn.prepareStatement(sql)) {
+			for (ImportDetail detail : details) {
+				pst.setString(1, detail.getImportID());
+				pst.setString(2, detail.getVariantID());
+				pst.setInt(3, detail.getQuantity());
+				pst.setDouble(4, detail.getPrice());
+				pst.addBatch();
+			}
+
+			int[] results = pst.executeBatch();
+			return results.length == details.size();
+		}
+	}
+
+
+	  public List<ImportDetail> getImportDetailsByImportID(String importID) {
+	        List<ImportDetail> details = new ArrayList<>();
+	        String sql = """
+	            SELECT d.*, p.name as productName, 
+	                   CONCAT(v.size, ' - ', v.color) as variantName
+	            FROM importdetail d
+	            LEFT JOIN productvariant v ON d.variantID = v.variantID
+	            LEFT JOIN product p ON v.productID = p.productID
+	            WHERE d.importID = ?
+	        """;
+
+	        try (Connection conn = myConnection.connect();
+	             PreparedStatement pst = conn.prepareStatement(sql)) {
+	            
+	            pst.setString(1, importID);
+	            try (ResultSet rs = pst.executeQuery()) {
+	                while (rs.next()) {
+	                    ImportDetail detail = new ImportDetail();
+	                    detail.setImportID(rs.getString("importID"));
+	                    detail.setVariantID(rs.getString("variantID"));
+	                    detail.setQuantity(rs.getInt("quantity"));
+	                    detail.setPrice(rs.getDouble("price"));
+	                    detail.setProductName(rs.getString("productName"));
+	                    detail.setVariantName(rs.getString("variantName"));
+	                    
+	                    details.add(detail);
+	                }
+	            }
+	            
+	            LOGGER.info("Retrieved " + details.size() + " details for import " + importID);
+	            
+	        } catch (SQLException e) {
+	            LOGGER.severe("Error getting import details for " + importID + ": " + e.getMessage());
+	        }
+	        
+	        return details;
+	    }
+}

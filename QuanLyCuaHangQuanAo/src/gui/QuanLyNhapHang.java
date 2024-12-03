@@ -2,132 +2,146 @@ package gui;
 
 import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
 import com.toedter.calendar.JDateChooser;
-
-import component.CreateDateChooser;
-import component.SetupTable;
+import bus.ImportBUS;
+import component.*;
 import dialog.ChiTietPhieuNhap;
-import entity.UserSession;
+import entity.*;
+import export.ExcelExporterDonNhap;
 import service.PermissionChecker;
-import style.CreateActionButton;
-import style.CreateFilter;
-import style.CustomScrollBarUI;
-import style.StyleComboBox;
-import style.StyleFormattedTextField;
+import style.*;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.JTableHeader;
+import javax.swing.border.*;
+import javax.swing.table.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.io.File;
-import java.text.NumberFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.logging.Logger;
-
-import javax.swing.plaf.basic.BasicComboBoxUI;
-import javax.swing.plaf.basic.BasicScrollBarUI;
-
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
+import java.text.*;
+import java.util.*;
+import java.util.List;
+import java.util.logging.*;
 
 public class QuanLyNhapHang extends JPanel {
-	// Constants
+	// Constants for styling and configuration
 	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
 	private static final Color CONTENT_COLOR = new Color(255, 242, 242);
 	private static final Color HOVER_COLOR = new Color(252, 231, 243);
-	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 14);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
 	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
-	private static final Font TITLE_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 16);
-	// Components
-	private JTable table;
-	private DefaultTableModel tableModel;
-	private JTextField searchField;
-	private JFormattedTextField fromAmountField;
-	private JFormattedTextField toAmountField;
-	private JDateChooser fromDateChooser;
-	private JDateChooser toDateChooser;
-	private JComboBox<String> supplierCombo;
-	private JComboBox<String> employeeCombo;
-	private JLabel totalRecordsValue;
-	private JLabel totalAmountValue;
+	private static final int BUTTON_HEIGHT = 38;
+	private static final int SEARCH_FIELD_WIDTH = 220;
+
+	// Core components
+	private final JTable table;
+	private final DefaultTableModel tableModel;
+	private final JTextField searchField;
+	private final JLabel totalRecordsValue;
+	private final JLabel totalAmountValue;
+
+	// Business logic and utilities
+	private final ImportBUS importBUS;
+	private final SimpleDateFormat dateFormatter;
+	private final NumberFormat currencyFormatter;
 	private static final Logger LOGGER = Logger.getLogger(QuanLyNhapHang.class.getName());
 
 	public QuanLyNhapHang() {
-		initializeComponents();
-		setupLayout();
-		loadSampleData();
+		importBUS = new ImportBUS();
+		dateFormatter = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+		currencyFormatter = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
+
+		// Initialize components
+		tableModel = createTableModel();
+		table = createTable();
+		searchField = createSearchField();
+		totalRecordsValue = new JLabel("0", SwingConstants.RIGHT);
+		totalAmountValue = new JLabel("0 VND", SwingConstants.RIGHT);
+
+		setupPanel();
+		loadData();
+		setupTableListeners();
 	}
 
-	private void initializeComponents() {
-		// Initialize labels first
-		totalRecordsValue = new JLabel("0");
-		totalRecordsValue.setFont(HEADER_FONT);
-		totalRecordsValue.setForeground(PRIMARY_COLOR);
-		totalAmountValue = new JLabel("0 VND");
-		totalAmountValue.setFont(HEADER_FONT);
-		totalAmountValue.setForeground(PRIMARY_COLOR);
-		// Initialize table model
-		String[] columns = { "Mã phiếu", "Nhà cung cấp", "Nhân viên nhập hàng", "Thời gian", "Tổng tiền" };
-		tableModel = new DefaultTableModel(columns, 0) {
+	private DefaultTableModel createTableModel() {
+		return new DefaultTableModel(
+				new String[] { "Mã phiếu", "Nhà cung cấp", "Nhân viên nhập hàng", "Thời gian", "Tổng tiền" }, 0) {
 			@Override
 			public boolean isCellEditable(int row, int column) {
 				return false;
 			}
 		};
+	}
 
-		// Initialize table
-		table = new JTable(tableModel);
+	private JTable createTable() {
+		JTable newTable = new JTable(tableModel);
 		SetupTable setupTable = new SetupTable();
-		setupTable.setupTable(table);
+		setupTable.setupTable(newTable);
 
-		// Initialize search components
-		searchField = new JTextField();
-		searchField.setPreferredSize(new Dimension(220, 35));
-		searchField.setFont(CONTENT_FONT);
+		// Enhanced table styling
+		newTable.setSelectionBackground(HOVER_COLOR);
+		newTable.setSelectionForeground(PRIMARY_COLOR);
+		newTable.setIntercellSpacing(new Dimension(10, 10));
 
-		// Initialize filter components
-		initializeFilterComponents();
+		// Configure header
+		JTableHeader header = newTable.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+
+		setupTableRenderers(newTable);
+		return newTable;
 	}
 
-	private void initializeFilterComponents() {
-		// Initialize combo boxes
-		supplierCombo = new JComboBox<>(
-				new String[] { "Tất cả", "Xưởng may Đại Nam", "Xưởng may Hoàng Gia", "Công ty TNHH May Việt Tiến" });
-		StyleComboBox styleComboBox = new StyleComboBox();
-		styleComboBox.styleComboBox(supplierCombo);
+	private void setupTableRenderers(JTable table) {
+		// Center renderer for ID and quantity columns
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
 
-		employeeCombo = new JComboBox<>(new String[] { "Tất cả", "Nguyễn Thị Tường Vi", "Trần Văn Nam", "Lê Thị Hoa" });
-		styleComboBox.styleComboBox(employeeCombo);
-		CreateDateChooser createDateChooser = new CreateDateChooser();
-		// Initialize date choosers
-		fromDateChooser = createDateChooser.createDateChooser();
-		toDateChooser = createDateChooser.createDateChooser();
+		// Right renderer for amount columns
+		DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+		rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
 
-		// Initialize amount fields
-		NumberFormat format = NumberFormat.getIntegerInstance();
-		format.setGroupingUsed(true);
-		fromAmountField = new JFormattedTextField(format);
-		toAmountField = new JFormattedTextField(format);
-		StyleFormattedTextField styleFomatText = new StyleFormattedTextField();
-		styleFomatText.styleFormattedTextField(fromAmountField);
-		styleFomatText.styleFormattedTextField(toAmountField);
+		// Apply renderers
+		table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // ID
+		table.getColumnModel().getColumn(4).setCellRenderer(rightRenderer); // Amount
 	}
 
-	private void setupLayout() {
+	private JTextField createSearchField() {
+		JTextField field = new JTextField();
+		field.setPreferredSize(new Dimension(SEARCH_FIELD_WIDTH, 35));
+		field.setFont(CONTENT_FONT);
+
+		// Add search on Enter key
+		field.addActionListener(e -> performSearch());
+
+		// Add placeholder text
+		field.addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				if (field.getText().equals("Tìm kiếm...")) {
+					field.setText("");
+					field.setForeground(Color.BLACK);
+				}
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (field.getText().isEmpty()) {
+					field.setText("Tìm kiếm...");
+					field.setForeground(Color.GRAY);
+				}
+			}
+		});
+
+		return field;
+	}
+
+	private void setupPanel() {
 		setLayout(new BorderLayout(0, 20));
 		setBackground(Color.WHITE);
 		setBorder(new EmptyBorder(30, 30, 30, 30));
 
-		// Add main panels
 		add(createTopPanel(), BorderLayout.NORTH);
-		add(createFilterPanel(), BorderLayout.WEST);
 		add(createMainPanel(), BorderLayout.CENTER);
 	}
 
@@ -135,73 +149,419 @@ public class QuanLyNhapHang extends JPanel {
 		JPanel panel = new JPanel(new BorderLayout(20, 0));
 		panel.setBackground(Color.WHITE);
 
-		// Get current user for permission checking
 		String currentUserId = UserSession.getInstance().getCurrentUser().getUserID();
 
-		// Search panel
-		JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-		searchPanel.setBackground(Color.WHITE);
-		searchPanel.add(searchField);
-		CreateFilter c = new CreateFilter();
-
-		JButton searchButton = c.createSearchButton();
-		configureButtonWithPermission(searchButton, currentUserId, PermissionChecker.PERM_ORDER_MANAGEMENT, () -> {
-			String keyword = searchField.getText().trim();
-			if (keyword.isEmpty()) {
-				JOptionPane.showMessageDialog(this, "Vui lòng nhập từ khóa tìm kiếm!", "Thông báo",
-						JOptionPane.WARNING_MESSAGE);
-				return;
-			}
-		});
-		searchPanel.add(searchButton);
-
-		// Action buttons panel
-		JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
-		actionPanel.setBackground(Color.WHITE);
-		CreateActionButton createActionButton = new CreateActionButton();
-
-		// Add Import Button
-		JButton addButton = createActionButton.createActionButton("Thêm phiếu nhập", "/icon/circle-plus.png", true,
-				true);
-		configureButtonWithPermission(addButton, currentUserId, PermissionChecker.PERM_ORDER_MANAGEMENT, () -> {
-			Container mainContent = QuanLyNhapHang.this.getParent();
-			mainContent.removeAll();
-			ThemDonNhap addPanel = new ThemDonNhap();
-			mainContent.add(addPanel, BorderLayout.CENTER);
-			mainContent.revalidate();
-			mainContent.repaint();
-		});
-		addButton.setPreferredSize(new Dimension(160, 38));
-
-		// Delete Button
-		JButton deleteButton = createActionButton.createActionButton("Xóa", "/icon/trash.png", true, false);
-		configureButtonWithPermission(deleteButton, currentUserId, PermissionChecker.PERM_ORDER_MANAGEMENT, () -> {
-			handleDelete();
-		});
-
-		// Info Button
-		JButton aboutButton = createActionButton.createActionButton("About", "/icon/info.png", true, false);
-		configureButtonWithPermission(aboutButton, currentUserId, PermissionChecker.PERM_ORDER_MANAGEMENT, () -> {
-			ChiTietPhieuNhap chiTietPhieuNhap = new ChiTietPhieuNhap();
-			chiTietPhieuNhap.chiTietPhieuNhap(table, tableModel);
-		});
-
-		// Export Button
-		JButton exportButton = createActionButton.createActionButton("Xuất Excel", "/icon/printer.png", true, false);
-		configureButtonWithPermission(exportButton, currentUserId, PermissionChecker.PERM_REPORT, () -> {
-			handleExport();
-		});
-		exportButton.setPreferredSize(new Dimension(160, 38));
-
-		actionPanel.add(addButton);
-		actionPanel.add(deleteButton);
-		actionPanel.add(aboutButton);
-		actionPanel.add(exportButton);
-
-		panel.add(searchPanel, BorderLayout.WEST);
-		panel.add(actionPanel, BorderLayout.EAST);
+		panel.add(createSearchPanel(currentUserId), BorderLayout.WEST);
+		panel.add(createActionPanel(currentUserId), BorderLayout.EAST);
 
 		return panel;
+	}
+
+	private JPanel createSearchPanel(String userId) {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+		panel.setBackground(Color.WHITE);
+
+		// Add search components
+		panel.add(searchField);
+
+		// Search button
+		JButton searchButton = new CreateFilter().createSearchButton();
+		configureButtonWithPermission(searchButton, userId, PermissionChecker.PERM_ORDER_MANAGEMENT,
+				this::performSearch);
+		panel.add(searchButton);
+
+		// Refresh button
+		JButton refreshButton = createStyledButton("Làm mới", 100);
+		configureButtonWithPermission(refreshButton, userId, PermissionChecker.PERM_ORDER_MANAGEMENT,
+				this::refreshData);
+		panel.add(refreshButton);
+
+		return panel;
+	}
+
+	private JButton createStyledButton(String text, int width) {
+		JButton button = new JButton(text);
+		button.setFont(CONTENT_FONT);
+		button.setBackground(Color.WHITE);
+		button.setForeground(PRIMARY_COLOR);
+		button.setBorder(BorderFactory.createLineBorder(PRIMARY_COLOR));
+		button.setPreferredSize(new Dimension(width, 35));
+		button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+		button.addMouseListener(new MouseAdapter() {
+			public void mouseEntered(MouseEvent e) {
+				button.setBackground(HOVER_COLOR);
+			}
+
+			public void mouseExited(MouseEvent e) {
+				button.setBackground(Color.WHITE);
+			}
+		});
+
+		return button;
+	}
+
+	private JPanel createActionPanel(String userId) {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+		panel.setBackground(Color.WHITE);
+
+		CreateActionButton actionButtonCreator = new CreateActionButton();
+
+		// Add Import Button
+		JButton addButton = actionButtonCreator.createActionButton("Thêm phiếu nhập", "/icon/circle-plus.png", true,
+				true);
+		configureButtonWithPermission(addButton, userId, PermissionChecker.PERM_ORDER_MANAGEMENT,
+				() -> showAddImportPanel());
+		panel.add(addButton);
+
+		// Delete Button
+		JButton deleteButton = actionButtonCreator.createActionButton("Xóa", "/icon/trash.png", true, false);
+		configureButtonWithPermission(deleteButton, userId, PermissionChecker.PERM_ORDER_MANAGEMENT,
+				this::handleDelete);
+		panel.add(deleteButton);
+
+		// Detail Button
+		JButton detailButton = actionButtonCreator.createActionButton("Chi tiết", "/icon/info.png", true, false);
+		configureButtonWithPermission(detailButton, userId, PermissionChecker.PERM_ORDER_MANAGEMENT,
+				this::showImportDetails);
+		panel.add(detailButton);
+
+		// Export Button
+		JButton exportButton = actionButtonCreator.createActionButton("Xuất Excel", "/icon/printer.png", true, false);
+		configureButtonWithPermission(exportButton, userId, PermissionChecker.PERM_REPORT, this::handleExport);
+		panel.add(exportButton);
+
+		return panel;
+	}
+
+	private void showAddImportPanel() {
+		Container mainContent = this.getParent();
+		mainContent.removeAll();
+		
+		mainContent.add(new ThemDonNhap(), BorderLayout.CENTER);
+		mainContent.revalidate();
+		mainContent.repaint();
+	}
+
+	private void showImportDetails() {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow == -1) {
+			showWarningMessage("Vui lòng chọn phiếu nhập để xem chi tiết");
+			return;
+		}
+
+		ChiTietPhieuNhap detailDialog = new ChiTietPhieuNhap();
+		detailDialog.showImportDetails(table);
+	}
+
+	private void handleExport() {
+		try {
+			// Create and configure file chooser
+			JFileChooser fileChooser = new JFileChooser();
+			fileChooser.setDialogTitle("Xuất danh sách phiếu nhập");
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			fileChooser.setSelectedFile(new File("PhieuNhap.xls")); // Changed to .xls for HSSFWorkbook
+
+			// Show save dialog and process result
+			if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+				File file = fileChooser.getSelectedFile();
+				String filePath = file.getAbsolutePath();
+
+				// Ensure correct file extension
+				if (!filePath.toLowerCase().endsWith(".xls")) {
+					filePath += ".xls";
+				}
+
+				// Check if file exists and confirm overwrite
+				File exportFile = new File(filePath);
+				if (exportFile.exists()) {
+					int response = JOptionPane.showConfirmDialog(this, "File đã tồn tại. Bạn có muốn ghi đè không?",
+							"Xác nhận ghi đè", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+					if (response != JOptionPane.YES_OPTION) {
+						return;
+					}
+				}
+
+				// Create exporter and export data
+				ExcelExporterDonNhap exporter = new ExcelExporterDonNhap();
+				exporter.exportToExcel(table, createDetailTable(), filePath);
+
+				// Show success message and log
+				JOptionPane.showMessageDialog(this, "Xuất file thành công: " + filePath, "Thông báo",
+						JOptionPane.INFORMATION_MESSAGE);
+
+				LOGGER.info("Successfully exported import data to: " + filePath);
+
+				// Open the containing folder if on Windows
+				if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+					Runtime.getRuntime().exec("explorer.exe /select," + filePath);
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.severe("Error exporting data: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "Lỗi khi xuất file: " + e.getMessage(), "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private JTable createDetailTable() {
+		String[] columns = { "Mã phiếu nhập", "Mã sản phẩm", "Tên sản phẩm", "Phân loại", "Đơn giá", "Số lượng",
+				"Thành tiền" };
+
+		DefaultTableModel detailModel = new DefaultTableModel(columns, 0);
+
+		try {
+			// Get all imports and their details
+			List<Import> imports = importBUS.getAllImports();
+			for (Import importObj : imports) {
+				List<ImportDetail> details = importBUS.getImportDetailsByImportId(importObj.getImportID());
+
+				// Add each detail to the model
+				for (ImportDetail detail : details) {
+					Object[] row = { importObj.getImportID(), detail.getVariantID(), detail.getProductName(),
+							detail.getVariantName(), String.format("%,d VND", Math.round(detail.getPrice())),
+							detail.getQuantity(),
+							String.format("%,d VND", Math.round(detail.getPrice() * detail.getQuantity())) };
+					detailModel.addRow(row);
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.severe("Error creating detail table: " + e.getMessage());
+		}
+
+		return new JTable(detailModel);
+	}
+
+	private void handleDelete() {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow == -1) {
+			showWarningMessage("Vui lòng chọn phiếu nhập để xóa");
+			return;
+		}
+
+		String importId = table.getValueAt(selectedRow, 0).toString();
+
+		if (showConfirmDialog("Bạn có chắc chắn muốn xóa phiếu nhập " + importId + "?")) {
+			try {
+				if (importBUS.deleteImport(importId)) {
+					tableModel.removeRow(selectedRow);
+					loadData(); // Refresh summary data
+					showInfoMessage("Đã xóa phiếu nhập thành công");
+				} else {
+					showErrorMessage("Không thể xóa phiếu nhập");
+				}
+			} catch (Exception e) {
+				LOGGER.severe("Error deleting import: " + e.getMessage());
+				showErrorMessage("Lỗi khi xóa phiếu nhập: " + e.getMessage());
+			}
+		}
+	}
+
+	private void performSearch() {
+		String keyword = searchField.getText().trim();
+
+		if (keyword.isEmpty() || keyword.equals("Tìm kiếm...")) {
+			showWarningMessage("Vui lòng nhập từ khóa tìm kiếm!");
+			return;
+		}
+
+		try {
+			List<Import> imports = importBUS.getAllImports();
+			updateTableWithFilteredData(imports, keyword.toLowerCase());
+		} catch (Exception e) {
+			LOGGER.severe("Error during search: " + e.getMessage());
+			showErrorMessage("Lỗi khi tìm kiếm: " + e.getMessage());
+		}
+	}
+
+	private void updateTableWithFilteredData(List<Import> imports, String keyword) {
+		tableModel.setRowCount(0);
+		double totalAmount = 0;
+		int matchCount = 0;
+
+		for (Import importObj : imports) {
+			if (matchesKeyword(importObj, keyword)) {
+				addImportToTable(importObj);
+				totalAmount += importObj.getTotalAmount();
+				matchCount++;
+			}
+		}
+
+		updateSummaryInfo(matchCount, totalAmount);
+
+		if (matchCount == 0) {
+			showInfoMessage("Không tìm thấy kết quả nào phù hợp với từ khóa: " + keyword);
+		}
+	}
+
+	private boolean matchesKeyword(Import importObj, String keyword) {
+		return importObj.getImportID().toLowerCase().contains(keyword)
+				|| importObj.getSupplier().toLowerCase().contains(keyword)
+				|| importObj.getStaff().toLowerCase().contains(keyword)
+				|| String.valueOf(importObj.getTotalAmount()).contains(keyword);
+	}
+
+	private void refreshData() {
+		searchField.setText("Tìm kiếm...");
+		searchField.setForeground(Color.GRAY);
+		loadData();
+	}
+
+	private void loadData() {
+		try {
+			List<Import> imports = importBUS.getAllImports();
+			updateTableWithAllData(imports);
+		} catch (Exception e) {
+			LOGGER.severe("Error loading data: " + e.getMessage());
+			showErrorMessage("Lỗi khi tải dữ liệu: " + e.getMessage());
+		}
+	}
+
+	private void updateTableWithAllData(List<Import> imports) {
+		tableModel.setRowCount(0);
+		double totalAmount = 0;
+
+		for (Import importObj : imports) {
+			addImportToTable(importObj);
+			totalAmount += importObj.getTotalAmount();
+		}
+
+		updateSummaryInfo(imports.size(), totalAmount);
+	}
+
+	private void addImportToTable(Import importObj) {
+		Object[] row = { importObj.getImportID(), importObj.getSupplier(), importObj.getStaff(),
+				dateFormatter.format(importObj.getImportDate()), currencyFormatter.format(importObj.getTotalAmount()) };
+		tableModel.addRow(row);
+	}
+
+	private void updateSummaryInfo(int recordCount, double totalAmount) {
+		totalRecordsValue.setText(String.valueOf(recordCount));
+		totalAmountValue.setText(currencyFormatter.format(totalAmount));
+		LOGGER.info(String.format("Updated summary: %d records, total amount: %s", recordCount,
+				currencyFormatter.format(totalAmount)));
+	}
+
+	private JPanel createMainPanel() {
+		JPanel mainPanel = new JPanel(new BorderLayout(0, 20));
+		mainPanel.setBackground(Color.WHITE);
+
+		// Create an enhanced scroll pane for the table
+		JScrollPane scrollPane = createEnhancedScrollPane();
+
+		// Add the main components to the panel
+		mainPanel.add(scrollPane, BorderLayout.CENTER);
+		mainPanel.add(createSummaryPanel(), BorderLayout.SOUTH);
+
+		return mainPanel;
+	}
+
+	private JScrollPane createEnhancedScrollPane() {
+		JScrollPane scrollPane = new JScrollPane(table);
+		scrollPane.getViewport().setBackground(Color.WHITE);
+		scrollPane.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
+
+		// Customize the scroll bars for better visual appeal
+		CustomScrollBarUI scrollBarUI = new CustomScrollBarUI();
+		scrollPane.getVerticalScrollBar().setUI(scrollBarUI);
+		scrollPane.getHorizontalScrollBar().setUI(scrollBarUI);
+
+		// Add custom corner for a polished look
+		scrollPane.setCorner(JScrollPane.UPPER_RIGHT_CORNER, createCornerComponent());
+
+		return scrollPane;
+	}
+
+	private JPanel createCornerComponent() {
+		JPanel corner = new JPanel();
+		corner.setBackground(Color.WHITE);
+		return corner;
+	}
+
+	private JPanel createSummaryPanel() {
+		// Create a panel for displaying summary information
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.X_AXIS));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(230, 230, 230)),
+				BorderFactory.createEmptyBorder(15, 20, 15, 20)));
+
+		// Create and style the summary labels
+		JLabel recordsLabel = createSummaryLabel("Tổng số phiếu:");
+		JLabel amountLabel = createSummaryLabel("Tổng tiền:");
+
+		// Style the value labels
+		styleSummaryValueLabel(totalRecordsValue);
+		styleSummaryValueLabel(totalAmountValue);
+
+		// Add components with proper spacing
+		panel.add(Box.createHorizontalGlue());
+		panel.add(recordsLabel);
+		panel.add(Box.createRigidArea(new Dimension(5, 0)));
+		panel.add(totalRecordsValue);
+		panel.add(Box.createRigidArea(new Dimension(30, 0)));
+		panel.add(amountLabel);
+		panel.add(Box.createRigidArea(new Dimension(5, 0)));
+		panel.add(totalAmountValue);
+
+		return panel;
+	}
+
+	private JLabel createSummaryLabel(String text) {
+		JLabel label = new JLabel(text);
+		label.setFont(CONTENT_FONT);
+		label.setForeground(Color.DARK_GRAY);
+		return label;
+	}
+
+	private void styleSummaryValueLabel(JLabel label) {
+		label.setFont(HEADER_FONT);
+		label.setForeground(PRIMARY_COLOR);
+		label.setPreferredSize(new Dimension(120, label.getPreferredSize().height));
+	}
+
+	private void setupTableListeners() {
+		// Add double-click listener for viewing details
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (e.getClickCount() == 2) {
+					showImportDetails();
+				}
+			}
+		});
+
+		// Add row selection listener for enabling/disabling buttons
+		table.getSelectionModel().addListSelectionListener(e -> {
+			if (!e.getValueIsAdjusting()) {
+				updateButtonStates();
+			}
+		});
+	}
+
+	private void updateButtonStates() {
+		boolean rowSelected = table.getSelectedRow() != -1;
+		// Update button states based on selection if needed
+	}
+
+	// Utility methods for showing dialogs
+	private void showWarningMessage(String message) {
+		JOptionPane.showMessageDialog(this, message, "Thông báo", JOptionPane.WARNING_MESSAGE);
+	}
+
+	private void showErrorMessage(String message) {
+		JOptionPane.showMessageDialog(this, message, "Lỗi", JOptionPane.ERROR_MESSAGE);
+	}
+
+	private void showInfoMessage(String message) {
+		JOptionPane.showMessageDialog(this, message, "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+	}
+
+	private boolean showConfirmDialog(String message) {
+		return JOptionPane.showConfirmDialog(this, message, "Xác nhận",
+				JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
 	}
 
 	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
@@ -219,207 +579,4 @@ public class QuanLyNhapHang extends JPanel {
 			LOGGER.warning("User " + userId + " attempted to access feature requiring " + permissionDesc);
 		}
 	}
-
-	private void handleDelete() {
-		int selectedRows[] = table.getSelectedRows();
-		if (selectedRows.length == 0) {
-			JOptionPane.showMessageDialog(this, "Vui lòng chọn phiếu nhập cần xóa!", "Thông báo",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-
-		int option = JOptionPane.showConfirmDialog(this,
-				"Bạn có chắc muốn xóa " + selectedRows.length + " phiếu nhập đã chọn?", "Xác nhận xóa",
-				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-
-		if (option == JOptionPane.YES_OPTION) {
-			try {
-				// Xóa từ dưới lên trên để tránh lỗi index
-				for (int i = selectedRows.length - 1; i >= 0; i--) {
-					String maPhieu = tableModel.getValueAt(selectedRows[i], 0).toString();
-					LOGGER.info("Deleting import order: " + maPhieu);
-					tableModel.removeRow(selectedRows[i]);
-				}
-				updateSummary();
-				JOptionPane.showMessageDialog(this, "Đã xóa thành công " + selectedRows.length + " phiếu nhập!",
-						"Thông báo", JOptionPane.INFORMATION_MESSAGE);
-			} catch (Exception e) {
-				LOGGER.severe("Error deleting import orders: " + e.getMessage());
-				JOptionPane.showMessageDialog(this, "Lỗi khi xóa phiếu nhập: " + e.getMessage(), "Lỗi",
-						JOptionPane.ERROR_MESSAGE);
-			}
-		}
-	}
-
-	private void handleExport() {
-		try {
-			JFileChooser fileChooser = new JFileChooser();
-			fileChooser.setDialogTitle("Xuất danh sách phiếu nhập");
-			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-			fileChooser.setSelectedFile(new File("PhieuNhap.xlsx"));
-
-			if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-				String filePath = fileChooser.getSelectedFile().getAbsolutePath();
-				if (!filePath.endsWith(".xlsx")) {
-					filePath += ".xlsx";
-				}
-				// Implement actual export logic here
-				LOGGER.info("Exporting import orders to: " + filePath);
-				JOptionPane.showMessageDialog(this, "Xuất file thành công: " + filePath, "Thông báo",
-						JOptionPane.INFORMATION_MESSAGE);
-			}
-		} catch (Exception e) {
-			LOGGER.severe("Error exporting file: " + e.getMessage());
-			JOptionPane.showMessageDialog(this, "Lỗi khi xuất file: " + e.getMessage(), "Lỗi",
-					JOptionPane.ERROR_MESSAGE);
-		}
-	}
-
-	// Add logging
-
-	private JPanel createFilterPanel() {
-		JPanel filterPanel = new JPanel();
-		filterPanel.setLayout(new BoxLayout(filterPanel, BoxLayout.Y_AXIS));
-		filterPanel.setBackground(CONTENT_COLOR);
-		filterPanel.setBorder(BorderFactory.createCompoundBorder(new EmptyBorder(0, 0, 0, 0), BorderFactory
-				.createCompoundBorder(new LineBorder(PRIMARY_COLOR, 0, true), new EmptyBorder(20, 20, 20, 20))));
-		filterPanel.setPreferredSize(new Dimension(350, 0));
-		CreateFilter createFiltera = new CreateFilter();
-		// Tiêu đề panel
-		filterPanel.add(createFiltera.createFilterTitle());
-
-		filterPanel.add(Box.createVerticalStrut(20));
-
-		// Nhà cung cấp
-		CreateFilter createFilter = new CreateFilter();
-		filterPanel.add(createFilter.createFilterField("Nhà cung cấp", supplierCombo));
-		filterPanel.add(Box.createVerticalStrut(15));
-
-		// Nhân viên
-		filterPanel.add(createFilter.createFilterField("Nhân viên tiếp nhận", employeeCombo));
-		filterPanel.add(Box.createVerticalStrut(15));
-
-		// Thời gian
-		filterPanel.add(createFilter.createDateFilterPanel(fromDateChooser, toDateChooser));
-		filterPanel.add(Box.createVerticalStrut(15));
-
-		// Khoảng tiền
-		filterPanel.add(createAmountFilterPanel());
-		filterPanel.add(Box.createVerticalStrut(25));
-		filterPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
-		// Buttons
-
-		filterPanel.add(createFilter.createFilterButtonsPanel());
-
-		return filterPanel;
-	}
-
-	private JPanel createMainPanel() {
-		JPanel mainPanel = new JPanel(new BorderLayout(0, 20));
-		mainPanel.setBackground(Color.WHITE);
-
-		// Create scroll pane for table
-		JScrollPane scrollPane = new JScrollPane(table);
-		scrollPane.getViewport().setBackground(Color.WHITE);
-		scrollPane.setBorder(BorderFactory.createLineBorder(new Color(245, 245, 245)));
-
-		// Tùy chỉnh thanh cuộn dọc
-		JScrollBar verticalScrollBar = scrollPane.getVerticalScrollBar();
-		CustomScrollBarUI customScrollBarUI = new CustomScrollBarUI();
-		verticalScrollBar.setUI(customScrollBarUI);
-
-		// Tùy chỉnh thanh cuộn ngang
-		JScrollBar horizontalScrollBar = scrollPane.getHorizontalScrollBar();
-		horizontalScrollBar.setUI(customScrollBarUI);
-
-		// Add components
-		mainPanel.add(scrollPane, BorderLayout.CENTER);
-		mainPanel.add(createSummaryPanel(), BorderLayout.SOUTH);
-
-		return mainPanel;
-	}
-
-	private JPanel createSummaryPanel() {
-		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 10));
-		panel.setBackground(Color.WHITE);
-		panel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(230, 230, 230)));
-
-		JLabel totalRecordsLabel = new JLabel("Tổng số phiếu: ");
-		totalRecordsLabel.setFont(CONTENT_FONT);
-
-		JLabel totalAmountLabel = new JLabel("Tổng tiền: ");
-		totalAmountLabel.setFont(CONTENT_FONT);
-
-		panel.add(totalRecordsLabel);
-		panel.add(totalRecordsValue);
-		panel.add(Box.createHorizontalStrut(20));
-		panel.add(totalAmountLabel);
-		panel.add(totalAmountValue);
-
-		return panel;
-	}
-
-	private JPanel createAmountFilterPanel() {
-		JPanel panel = new JPanel();
-		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBackground(CONTENT_COLOR);
-		panel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-		JLabel titleLabel = new JLabel("Khoảng tiền (VND)");
-		titleLabel.setFont(CONTENT_FONT);
-		titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-		panel.add(titleLabel);
-		panel.add(Box.createVerticalStrut(12));
-
-		JPanel fieldsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-		fieldsPanel.setBackground(CONTENT_COLOR);
-
-		fromAmountField.setPreferredSize(new Dimension(120, 35));
-		toAmountField.setPreferredSize(new Dimension(120, 35));
-
-		fieldsPanel.add(fromAmountField);
-		fieldsPanel.add(new JLabel("—"));
-		fieldsPanel.add(toAmountField);
-
-		panel.add(fieldsPanel);
-		return panel;
-	}
-
-	private void loadSampleData() {
-		Object[][] data = { { "P01", "Xưởng may Đại Nam", "Nguyễn Thị Tường Vi", "01/11/2023", "15,000,000 VND" },
-				{ "P02", "Xưởng may Hoàng Gia", "Trần Văn Nam", "02/11/2023", "12,500,000 VND" },
-				{ "P03", "Công ty TNHH May Việt Tiến", "Lê Thị Hoa", "03/11/2023", "18,750,000 VND" },
-				{ "P04", "Xưởng may Đại Nam", "Nguyễn Thị Tường Vi", "05/11/2023", "22,000,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P05", "Xưởng may Hoàng Gia", "Trần Văn Nam", "07/11/2023", "9,800,000 VND" },
-				{ "P06", "Công ty TNHH May Việt Tiến", "Lê Thị Hoa", "10/11/2023", "16,300,000 VND" } };
-
-		for (Object[] row : data) {
-			tableModel.addRow(row);
-		}
-		updateSummary();
-	}
-
-	private void updateSummary() {
-		double totalAmount = 0;
-		for (int i = 0; i < tableModel.getRowCount(); i++) {
-			String amountStr = tableModel.getValueAt(i, 4).toString().replace(" VND", "").replace(",", "");
-			totalAmount += Double.parseDouble(amountStr);
-		}
-
-		NumberFormat currencyFormat = NumberFormat.getNumberInstance();
-		String formattedAmount = currencyFormat.format(totalAmount) + " VND";
-
-		totalRecordsValue.setText(String.valueOf(tableModel.getRowCount()));
-		totalAmountValue.setText(formattedAmount);
-	}
-
 }

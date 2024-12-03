@@ -1,0 +1,71 @@
+package dao;
+
+import entity.ImportDetail;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDetailDAO {
+	private static final Logger LOGGER = Logger.getLogger(ImportDetailDAO.class.getName());
+	private MyConnection myConnection;
+
+	public ImportDetailDAO() {
+		myConnection = new MyConnection();
+	}
+
+	 public List<ImportDetail> getImportDetailsByImportID(String importID) {
+	        List<ImportDetail> details = new ArrayList<>();
+	        // Updated query to use stored product information
+	        String sql = "SELECT * FROM importdetail WHERE importID = ?";
+
+	        try (Connection conn = myConnection.connect();
+	             PreparedStatement pst = conn.prepareStatement(sql)) {
+	            
+	            pst.setString(1, importID);
+	            try (ResultSet rs = pst.executeQuery()) {
+	                while (rs.next()) {
+	                    ImportDetail detail = new ImportDetail();
+	                    detail.setImportID(rs.getString("importID"));
+	                    detail.setVariantID(rs.getString("variantID"));
+	                    detail.setQuantity(rs.getInt("quantity"));
+	                    detail.setPrice(rs.getDouble("price"));
+	                    detail.setProductName(rs.getString("productName"));
+	                    detail.setVariantName(rs.getString("variantInfo"));
+	                    
+	                    details.add(detail);
+	                }
+	            }
+	            
+	            LOGGER.info("Retrieved " + details.size() + " details for import " + importID);
+	            
+	        } catch (SQLException e) {
+	            LOGGER.severe("Error getting import details for " + importID + ": " + e.getMessage());
+	        }
+	        return details;
+	    }
+
+	    public boolean addImportDetail(ImportDetail detail) {
+	        String sql = "INSERT INTO importdetail (importID, variantID, quantity, price) VALUES (?, ?, ?, ?)";
+	        
+	        try (Connection conn = myConnection.connect();
+	             PreparedStatement pst = conn.prepareStatement(sql)) {
+	            
+	            pst.setString(1, detail.getImportID());
+	            pst.setString(2, detail.getVariantID());
+	            pst.setInt(3, detail.getQuantity());
+	            pst.setDouble(4, detail.getPrice());
+	            
+	            int result = pst.executeUpdate();
+	            LOGGER.info("Added import detail for variant " + detail.getVariantID());
+	            return result > 0;
+	            
+	        } catch (SQLException e) {
+	            LOGGER.severe("Error adding import detail: " + e.getMessage());
+	            return false;
+	        }
+	    }
+
+
+}

@@ -1,0 +1,91 @@
+package bus;
+
+import dao.ImportDetailDAO;
+import entity.ImportDetail;
+import entity.ProductVariant;
+
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDetailBUS {
+	private static final Logger LOGGER = Logger.getLogger(ImportDetailBUS.class.getName());
+	private ImportDetailDAO importDetailDAO;
+
+	public ImportDetailBUS() {
+		importDetailDAO = new ImportDetailDAO();
+	}
+
+
+
+	// Additional helper method to calculate total for a set of details
+	public double calculateTotal(List<ImportDetail> details) {
+		return details.stream().mapToDouble(detail -> detail.getQuantity() * detail.getPrice()).sum();
+	}
+
+	// Method to validate import details
+	public boolean validateDetails(List<ImportDetail> details) {
+		if (details == null || details.isEmpty()) {
+			return false;
+		}
+
+		for (ImportDetail detail : details) {
+			if (detail.getQuantity() <= 0 || detail.getPrice() <= 0) {
+				return false;
+			}
+			if (detail.getVariantID() == null || detail.getVariantID().trim().isEmpty()) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+	public List<ImportDetail> getImportDetailsByImportId(String importId) {
+        try {
+            // First validate the input
+            if (importId == null || importId.trim().isEmpty()) {
+                LOGGER.warning("Attempted to get import details with null or empty import ID");
+                throw new IllegalArgumentException("Import ID cannot be empty");
+            }
+
+            // Retrieve the basic import details from the DAO
+            List<ImportDetail> details = importDetailDAO.getImportDetailsByImportId(importId);
+
+            // If no details found, log it but don't throw an exception
+            if (details.isEmpty()) {
+                LOGGER.warning("No details found for import ID: " + importId);
+                return details;
+            }
+
+            // For each detail, enrich it with additional product information if needed
+            for (ImportDetail detail : details) {
+                enrichDetailWithProductInfo(detail);
+            }
+
+            // Log successful retrieval
+            LOGGER.info("Successfully retrieved " + details.size() + " details for import " + importId);
+            return details;
+
+        } catch (Exception e) {
+            LOGGER.severe("Error retrieving import details for import " + importId + ": " + e.getMessage());
+            throw new RuntimeException("Failed to retrieve import details", e);
+        }
+    }
+
+    // Helper method to add product information to each detail
+    private void enrichDetailWithProductInfo(ImportDetail detail) {
+        try {
+            // Here you would typically load additional product information
+            // For example, getting the product name, category, etc.
+            ProductVariant variant = productVariantDAO.getVariantById(detail.getVariantID());
+            if (variant != null) {
+                detail.setProductName(variant.getProductName());
+                detail.setVariantName(variant.getVariantName());
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Could not enrich detail with product info for variant " + 
+                         detail.getVariantID() + ": " + e.getMessage());
+        }
+    }
+	
+	
+}

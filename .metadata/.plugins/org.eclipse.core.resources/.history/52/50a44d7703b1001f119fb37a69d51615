@@ -1,0 +1,528 @@
+package gui;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+import bus.ImportBUS;
+import dao.SanPhamDAO;
+import entity.*;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
+import javax.swing.plaf.basic.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.text.NumberFormat;
+import java.util.*;
+import java.util.logging.Logger;
+
+public class ThemDonNhap extends JPanel {
+	// Constants for styling
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Color CONTENT_COLOR = new Color(255, 242, 242);
+	private static final Color HOVER_COLOR = new Color(252, 231, 243);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
+	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+	private static final Logger LOGGER = Logger.getLogger(ThemDonNhap.class.getName());
+
+	// Main UI Components
+	private JTable danhSachSPTable;
+	private DefaultTableModel danhSachSPModel;
+	private JTable donNhapTable;
+	private DefaultTableModel donNhapModel;
+	private JLabel tongTienLabel;
+
+	// Input Fields
+	private JTextField maDonNhapField;
+	private JTextField maSPField;
+	private JTextField tenSPField;
+	private JTextField giaNhapField;
+	private JTextField thuongHieuField;
+	private JTextField soLuongField;
+	private JComboBox<String> phanLoaiCombo;
+
+	// Selection Combos
+	private JComboBox<String> nhanVienCombo;
+	private JComboBox<String> nhaCungCapCombo;
+
+	// Action Buttons
+	private JButton themSPButton;
+	private JButton suaButton;
+	private JButton xoaButton;
+	private JButton nhapHangButton;
+	private JButton danhSachButton;
+
+	// Business Logic
+	private ImportBUS importBUS;
+	private SanPhamDAO sanPhamDAO;
+
+	// Helper class for variant information
+	private class VariantInfo {
+		String color;
+		String size;
+		int quantity;
+
+		VariantInfo(String variantDisplay) {
+			try {
+				String[] parts = variantDisplay.split(" - ");
+				this.color = parts[0].substring(5); // Skip "Màu: "
+				String sizePart = parts[1];
+				this.size = sizePart.substring(6, sizePart.indexOf("(") - 1); // Skip "Size: "
+				this.quantity = Integer.parseInt(sizePart.substring(sizePart.indexOf("(") + 5, sizePart.indexOf(")")));
+			} catch (Exception e) {
+				LOGGER.warning("Error parsing variant info: " + variantDisplay);
+				this.color = "";
+				this.size = "";
+				this.quantity = 0;
+			}
+		}
+
+		@Override
+		public String toString() {
+			return String.format("Màu: %s - Size: %s (Còn: %d)", color, size, quantity);
+		}
+	}
+
+	public ThemDonNhap() {
+		setLayout(new BorderLayout());
+		setBackground(Color.WHITE);
+		setBorder(new EmptyBorder(20, 20, 20, 20));
+
+		// Initialize business logic classes
+		sanPhamDAO = new SanPhamDAO();
+		importBUS = new ImportBUS();
+
+		initializeComponents();
+		setupLayout();
+		addEventListeners();
+		loadProductData();
+	}
+
+	// Initialize all UI components
+	private void initializeComponents() {
+		// Setup tables
+		setupDanhSachSPTable();
+		setupDonNhapTable();
+
+		// Initialize text fields
+		maDonNhapField = createStyledTextField(15);
+		maSPField = createStyledTextField(10);
+		tenSPField = createStyledTextField(20);
+		giaNhapField = createStyledTextField(10);
+		thuongHieuField = createStyledTextField(15);
+		soLuongField = createStyledTextField(5);
+
+		// Make certain fields read-only
+		maSPField.setEditable(false);
+		tenSPField.setEditable(false);
+		thuongHieuField.setEditable(false);
+
+		// Initialize combo boxes
+		phanLoaiCombo = createStyledComboBox(new String[] { "Chọn phân loại" });
+		nhanVienCombo = createStyledComboBox(
+				new String[] { "Chọn nhân viên", "Nguyễn Thị Tường Vi", "Trần Văn Nam", "Lê Thị Hoa" });
+		nhaCungCapCombo = createStyledComboBox(new String[] { "Chọn nhà cung cấp", "Xưởng may Đại Nam",
+				"Xưởng may Hoàng Gia", "Công ty TNHH May Việt Tiến" });
+
+		// Initialize buttons
+		themSPButton = createStyledButton("Thêm SP vào đơn", "/icon/circle-plus.png", true);
+		suaButton = createStyledButton("Sửa", "/icon/pencil.png", false);
+		xoaButton = createStyledButton("Xóa", "/icon/trash.png", false);
+		nhapHangButton = createStyledButton("NHẬP HÀNG", null, true);
+		danhSachButton = createStyledButton("DANH SÁCH ĐƠN NHẬP", null, true);
+
+		// Style list button differently
+		danhSachButton.setBackground(Color.WHITE);
+		danhSachButton.setFont(CONTENT_FONT);
+		danhSachButton.setForeground(Color.BLACK);
+		danhSachButton.setPreferredSize(new Dimension(200, 35));
+
+		// Initialize total amount label
+		tongTienLabel = new JLabel("TỔNG TIỀN: 0 đ");
+		tongTienLabel.setFont(HEADER_FONT);
+		tongTienLabel.setForeground(PRIMARY_COLOR);
+	}
+
+	private void setupDanhSachSPTable() {
+		// Define columns for the product list table
+		String[] columns = { "Mã SP", "Tên sản phẩm", "Số lượng tồn" };
+		danhSachSPModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false; // Make table read-only
+			}
+		};
+		danhSachSPTable = new JTable(danhSachSPModel);
+		setupTable(danhSachSPTable, true); // true indicates this is the product list table
+	}
+
+	private void setupDonNhapTable() {
+		// Define columns for the order details table
+		String[] columns = { "Mã SP", "Tên sản phẩm", "Màu sắc", "Kích cỡ", "Thương hiệu", "Đơn giá", "Số lượng" };
+		donNhapModel = new DefaultTableModel(columns, 0) {
+			@Override
+			public boolean isCellEditable(int row, int column) {
+				return false; // Make table read-only
+			}
+		};
+		donNhapTable = new JTable(donNhapModel);
+		setupTable(donNhapTable, false); // false indicates this is the order table
+	}
+
+	private void setupTable(JTable table, boolean isProductList) {
+		// Apply consistent table styling
+		table.setFont(CONTENT_FONT);
+		table.setRowHeight(35);
+		table.setGridColor(new Color(230, 230, 230));
+		table.setShowVerticalLines(true);
+		table.setShowHorizontalLines(true);
+
+		// Setup table header
+		JTableHeader header = table.getTableHeader();
+		header.setFont(HEADER_FONT);
+		header.setBackground(isProductList ? CONTENT_COLOR : Color.WHITE);
+		header.setForeground(Color.BLACK);
+		header.setPreferredSize(new Dimension(header.getPreferredSize().width, 40));
+
+		// Configure selection behavior
+		table.setSelectionBackground(HOVER_COLOR);
+		table.setSelectionForeground(Color.BLACK);
+		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+		// Set up cell renderers for proper alignment
+		setupTableRenderers(table, isProductList);
+	}
+
+	private void setupTableRenderers(JTable table, boolean isProductList) {
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+
+		DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+		rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
+
+		if (isProductList) {
+			// Setup renderers for product list table
+			table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // Mã SP
+			table.getColumnModel().getColumn(2).setCellRenderer(centerRenderer); // Số lượng
+			table.setBackground(CONTENT_COLOR);
+		} else {
+			// Setup renderers for order table
+			table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // Mã SP
+			table.getColumnModel().getColumn(3).setCellRenderer(centerRenderer); // Kích cỡ
+			table.getColumnModel().getColumn(5).setCellRenderer(rightRenderer); // Đơn giá
+			table.getColumnModel().getColumn(6).setCellRenderer(centerRenderer); // Số lượng
+		}
+	}
+
+	// Variant loading and handling methods
+	private void loadVariantsForProduct(String productId) {
+		try {
+			phanLoaiCombo.removeAllItems();
+			phanLoaiCombo.addItem("Chọn phân loại");
+
+			// Query to get all available variants for the selected product
+			String sql = """
+					    SELECT v.color, v.size, v.quantity
+					    FROM productvariant v
+					    WHERE v.productID = ? AND v.status = 'active'
+					    ORDER BY v.color, v.size
+					""";
+
+			try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+				pst.setString(1, productId);
+				ResultSet rs = pst.executeQuery();
+
+				while (rs.next()) {
+					// Format variant display string
+					String variantDisplay = String.format("Màu: %s - Size: %s (Còn: %d)", rs.getString("color"),
+							rs.getString("size"), rs.getInt("quantity"));
+					phanLoaiCombo.addItem(variantDisplay);
+				}
+			}
+
+			// Enable combo box if variants are available
+			phanLoaiCombo.setEnabled(phanLoaiCombo.getItemCount() > 1);
+
+		} catch (Exception e) {
+			LOGGER.severe("Error loading product variants: " + e.getMessage());
+			showMessage("Lỗi khi tải phân loại sản phẩm", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Event handling methods
+	private void addEventListeners() {
+		// Product selection handler
+		danhSachSPTable.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				handleProductSelection();
+			}
+		});
+
+		// Add product to order handler
+		themSPButton.addActionListener(e -> {
+			if (validateProductInput()) {
+				addProductToOrder();
+			}
+		});
+
+		// Edit product handler
+		suaButton.addActionListener(e -> {
+			int row = donNhapTable.getSelectedRow();
+			if (row >= 0) {
+				loadProductForEdit(row);
+			} else {
+				showMessage("Vui lòng chọn sản phẩm cần sửa", JOptionPane.WARNING_MESSAGE);
+			}
+		});
+
+		// Delete product handler
+		xoaButton.addActionListener(e -> {
+			int row = donNhapTable.getSelectedRow();
+			if (row >= 0) {
+				int confirm = JOptionPane.showConfirmDialog(this, "Bạn có chắc muốn xóa sản phẩm này?", "Xác nhận xóa",
+						JOptionPane.YES_NO_OPTION);
+
+				if (confirm == JOptionPane.YES_OPTION) {
+					donNhapModel.removeRow(row);
+					updateTongTien();
+				}
+			} else {
+				showMessage("Vui lòng chọn sản phẩm cần xóa", JOptionPane.WARNING_MESSAGE);
+			}
+		});
+
+		// Import order handler
+		nhapHangButton.addActionListener(e -> {
+			if (validateOrder()) {
+				saveOrder();
+			}
+		});
+
+		// Back to list handler
+		danhSachButton.addActionListener(e -> switchToQuanLyNhapHang());
+
+		// Variant selection handler
+		phanLoaiCombo.addActionListener(e -> {
+			if (phanLoaiCombo.getSelectedIndex() > 0) {
+				soLuongField.requestFocus();
+			}
+		});
+	}
+
+	// Product handling methods
+	private void handleProductSelection() {
+		int selectedRow = danhSachSPTable.getSelectedRow();
+		if (selectedRow >= 0) {
+			try {
+				String maSP = danhSachSPModel.getValueAt(selectedRow, 0).toString();
+				SanPham sp = sanPhamDAO.getSanPhamByID(maSP);
+
+				if (sp != null) {
+					// Fill in product details
+					maSPField.setText(sp.getMaSP());
+					tenSPField.setText(sp.getTenSP());
+					thuongHieuField.setText(sp.getThuongHieu());
+
+					// Load variants and reset input fields
+					loadVariantsForProduct(sp.getMaSP());
+					soLuongField.setText("");
+					giaNhapField.setText("");
+
+					// Set focus to price field
+					giaNhapField.requestFocus();
+				}
+			} catch (Exception e) {
+				LOGGER.severe("Error loading product details: " + e.getMessage());
+				showMessage("Lỗi khi tải thông tin sản phẩm", JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	// Order processing and validation methods
+	private void addProductToOrder() {
+		try {
+			// Validate variant selection
+			if (phanLoaiCombo.getSelectedIndex() == 0) {
+				showMessage("Vui lòng chọn phân loại sản phẩm!", JOptionPane.ERROR_MESSAGE);
+				return;
+			}
+
+			// Parse selected variant information
+			VariantInfo selectedVariant = new VariantInfo(phanLoaiCombo.getSelectedItem().toString());
+			String variantKey = generateVariantKey(maSPField.getText().trim(), selectedVariant.color,
+					selectedVariant.size);
+
+			// Check for duplicate variants in order
+			if (isDuplicateVariant(variantKey)) {
+				showMessage("Phân loại này đã có trong đơn nhập!", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+
+			// Parse and validate price input
+			double giaNhap = parsePrice(giaNhapField.getText().trim());
+			if (giaNhap <= 0) {
+				throw new IllegalArgumentException("Giá nhập phải lớn hơn 0");
+			}
+
+			// Parse and validate quantity input
+			int soLuong = Integer.parseInt(soLuongField.getText().trim());
+			if (soLuong <= 0) {
+				throw new IllegalArgumentException("Số lượng phải lớn hơn 0");
+			}
+
+			// Format price for display
+			NumberFormat formatter = NumberFormat.getNumberInstance();
+			String giaNhapFormatted = formatter.format(giaNhap);
+
+			// Add product to order table
+			Object[] rowData = { maSPField.getText().trim(), // Mã sản phẩm
+					tenSPField.getText().trim(), // Tên sản phẩm
+					selectedVariant.color, // Màu sắc
+					selectedVariant.size, // Kích cỡ
+					thuongHieuField.getText().trim(), // Thương hiệu
+					giaNhapFormatted, // Đơn giá
+					soLuong // Số lượng đặt
+			};
+			donNhapModel.addRow(rowData);
+
+			// Update total amount and clear input fields
+			updateTongTien();
+			clearProductInputs();
+			LOGGER.info("Added product variant to order: " + variantKey);
+
+		} catch (NumberFormatException e) {
+			showMessage("Vui lòng nhập giá trị số hợp lệ!", JOptionPane.ERROR_MESSAGE);
+		} catch (IllegalArgumentException e) {
+			showMessage(e.getMessage(), JOptionPane.ERROR_MESSAGE);
+		} catch (Exception e) {
+			LOGGER.severe("Error adding product to order: " + e.getMessage());
+			showMessage("Lỗi khi thêm sản phẩm: " + e.getMessage(), JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void saveOrder() {
+		try {
+			// Create base import order
+			Import importOrder = new Import();
+			importOrder.setImportID(generateImportID());
+			importOrder.setImportDate(new Date());
+
+			// Get and validate supplier selection
+			String supplier = nhaCungCapCombo.getSelectedItem().toString();
+			if (supplier.startsWith("Chọn")) {
+				throw new IllegalStateException("Vui lòng chọn nhà cung cấp");
+			}
+			importOrder.setSupplier(supplier);
+
+			// Get and validate staff selection
+			String staff = nhanVienCombo.getSelectedItem().toString();
+			if (staff.startsWith("Chọn")) {
+				throw new IllegalStateException("Vui lòng chọn nhân viên");
+			}
+			importOrder.setStaff(staff);
+
+			// Create import details from order table
+			List<ImportDetail> details = createImportDetails();
+			importOrder.setImportDetails(details);
+
+			// Calculate and set total amount
+			double totalAmount = calculateTotalAmount(details);
+			importOrder.setTotalAmount(totalAmount);
+
+			// Save to database through BUS layer
+			boolean success = importBUS.createImport(importOrder);
+
+			if (success) {
+				showMessage("Đã lưu đơn nhập hàng thành công!", JOptionPane.INFORMATION_MESSAGE);
+				clearForm();
+				switchToQuanLyNhapHang();
+			} else {
+				showMessage("Không thể lưu đơn nhập hàng. Vui lòng thử lại!", JOptionPane.ERROR_MESSAGE);
+			}
+
+		} catch (IllegalStateException e) {
+			showMessage(e.getMessage(), JOptionPane.ERROR_MESSAGE);
+		} catch (Exception e) {
+			LOGGER.severe("Error saving import order: " + e.getMessage());
+			showMessage("Lỗi khi lưu đơn nhập: " + e.getMessage(), JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	// Helper methods for order processing
+	private String generateImportID() {
+		// Get current timestamp for unique ID
+		long timestamp = System.currentTimeMillis();
+		return String.format("IMP%d", timestamp % 100000);
+	}
+
+	private String generateVariantKey(String productId, String color, String size) {
+		return String.format("%s-%s-%s", productId, color, size);
+	}
+
+	private boolean isDuplicateVariant(String variantKey) {
+		for (int i = 0; i < donNhapModel.getRowCount(); i++) {
+			String existingKey = generateVariantKey(donNhapModel.getValueAt(i, 0).toString(), // Product ID
+					donNhapModel.getValueAt(i, 2).toString(), // Color
+					donNhapModel.getValueAt(i, 3).toString() // Size
+			);
+			if (existingKey.equals(variantKey)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private List<ImportDetail> createImportDetails() {
+		List<ImportDetail> details = new ArrayList<>();
+
+		for (int i = 0; i < donNhapModel.getRowCount(); i++) {
+			ImportDetail detail = new ImportDetail();
+
+			// Create variant ID from product, color, and size
+			String variantId = generateVariantKey(donNhapModel.getValueAt(i, 0).toString(),
+					donNhapModel.getValueAt(i, 2).toString(), donNhapModel.getValueAt(i, 3).toString());
+
+			detail.setVariantID(variantId);
+			detail.setPrice(parsePrice(donNhapModel.getValueAt(i, 5).toString()));
+			detail.setQuantity(Integer.parseInt(donNhapModel.getValueAt(i, 6).toString()));
+
+			details.add(detail);
+		}
+
+		return details;
+	}
+
+	private double calculateTotalAmount(List<ImportDetail> details) {
+		return details.stream().mapToDouble(detail -> detail.getPrice() * detail.getQuantity()).sum();
+	}
+
+	private void updateTongTien() {
+		double total = 0;
+		for (int i = 0; i < donNhapModel.getRowCount(); i++) {
+			String priceStr = donNhapModel.getValueAt(i, 5).toString().replace(",", "");
+			double price = Double.parseDouble(priceStr);
+			int quantity = Integer.parseInt(donNhapModel.getValueAt(i, 6).toString());
+			total += price * quantity;
+		}
+
+		NumberFormat formatter = NumberFormat.getNumberInstance();
+		formatter.setMaximumFractionDigits(0);
+		tongTienLabel.setText("TỔNG TIỀN: " + formatter.format(total) + " đ");
+	}
+
+	private double parsePrice(String priceStr) {
+		return Double.parseDouble(priceStr.replaceAll("[^\\d.]", ""));
+	}
+
+	private void switchToQuanLyNhapHang() {
+		Container mainContent = ThemDonNhap.this.getParent();
+		mainContent.removeAll();
+		mainContent.add(new QuanLyNhapHang());
+		mainContent.revalidate();
+		mainContent.repaint();
+	}
+}

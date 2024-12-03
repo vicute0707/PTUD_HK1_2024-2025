@@ -1,0 +1,86 @@
+package dao;
+
+import entity.ImportDetail;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDetailDAO {
+	private static final Logger LOGGER = Logger.getLogger(ImportDetailDAO.class.getName());
+	private MyConnection myConnection;
+	private ProductVariantDAO variantDAO;
+
+	public ImportDetailDAO() {
+		myConnection = new MyConnection();
+		variantDAO = new ProductVariantDAO();
+	}
+
+	public boolean addImportDetail(ImportDetail detail) {
+		Connection conn = null;
+		PreparedStatement pst = null;
+		boolean success = false;
+
+		try {
+			conn = myConnection.connect();
+			conn.setAutoCommit(false); // Start transaction
+
+			// 1. Thêm chi tiết nhập hàng
+			String sql = "INSERT INTO importdetail (importID, variantID, quantity, price) VALUES (?, ?, ?, ?)";
+			pst = conn.prepareStatement(sql);
+			pst.setString(1, detail.getImportID());
+			pst.setString(2, detail.getVariantID());
+			pst.setInt(3, detail.getQuantity());
+			pst.setDouble(4, detail.getPrice());
+
+			int result = pst.executeUpdate();
+
+			if (result > 0) {
+				// 2. Cập nhật số lượng trong productvariant
+				if (updateVariantQuantity(detail.getVariantID(), detail.getQuantity(), conn)) {
+					conn.commit();
+					success = true;
+					LOGGER.info("Successfully added import detail and updated variant quantity");
+				} else {
+					conn.rollback();
+					LOGGER.warning("Failed to update variant quantity");
+				}
+			}
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error adding import detail: " + e.getMessage());
+			try {
+				if (conn != null)
+					conn.rollback();
+			} catch (SQLException ex) {
+				LOGGER.severe("Error during rollback: " + ex.getMessage());
+			}
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (conn != null) {
+					conn.setAutoCommit(true);
+					conn.close();
+				}
+			} catch (SQLException e) {
+				LOGGER.severe("Error closing resources: " + e.getMessage());
+			}
+		}
+
+		return success;
+	}
+
+	private boolean updateVariantQuantity(String variantID, int importQuantity, Connection conn) throws SQLException {
+		String sql = "UPDATE productvariant SET quantity = quantity + ? WHERE variantID = ?";
+
+		try (PreparedStatement pst = conn.prepareStatement(sql)) {
+			pst.setInt(1, importQuantity);
+			pst.setString(2, variantID);
+
+			int result = pst.executeUpdate();
+			return result > 0;
+		}
+	}
+}

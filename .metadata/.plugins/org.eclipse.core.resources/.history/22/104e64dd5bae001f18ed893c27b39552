@@ -1,0 +1,66 @@
+package bus;
+
+import java.util.*;
+import java.util.logging.Logger;
+
+import dao.ProductVariantDAO;
+import entity.ProductVariant;
+
+public class ProductVariantBUS {
+	private static final Logger LOGGER = Logger.getLogger(ProductVariantBUS.class.getName());
+	private ProductVariantDAO variantDAO;
+
+	public ProductVariantBUS() {
+		variantDAO = new ProductVariantDAO();
+	}
+
+	public List<ProductVariant> getAllVariantsByProductID(String productID) {
+		try {
+			List<ProductVariant> variants = variantDAO.getAllVariantsByProductID(productID);
+			LOGGER.info("Đã lấy " + variants.size() + " biến thể sản phẩm của sản phẩm " + productID);
+			return variants;
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi lấy biến thể sản phẩm: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	public boolean addVariant(ProductVariant variant) {
+		try {
+			validateVariant(variant);
+			boolean result = variantDAO.addVariant(variant);
+			if (result) {
+				LOGGER.info("Thêm biến thể sản phẩm thành công: " + variant.getVariantID());
+			} else {
+				LOGGER.warning("Không thể thêm biến thể sản phẩm: " + variant.getVariantID());
+			}
+			return result;
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi thêm biến thể sản phẩm: " + e.getMessage());
+			return false;
+		}
+	}
+
+	private void validateVariant(ProductVariant variant) throws IllegalArgumentException {
+		if (variant == null) {
+			throw new IllegalArgumentException("Biến thể sản phẩm không được null");
+		}
+		if (variant.getVariantID() == null || variant.getVariantID().trim().isEmpty()) {
+			throw new IllegalArgumentException("Mã biến thể không được để trống");
+		}
+		if (variant.getProductID() == null || variant.getProductID().trim().isEmpty()) {
+			throw new IllegalArgumentException("Mã sản phẩm không được để trống");
+		}
+		if (variant.getSize() == null || variant.getSize().trim().isEmpty()) {
+			throw new IllegalArgumentException("Kích cỡ không được để trống");
+		}
+		if (variant.getColor() == null || variant.getColor().trim().isEmpty()) {
+			throw new IllegalArgumentException("Màu sắc không được để trống");
+		}
+		if (variant.getQuantity() < 0) {
+			throw new IllegalArgumentException("Số lượng không được âm");
+		}
+	}
+
+	// Thêm các phương thức cập nhật, xóa biến thể sản phẩm tương tự
+}

@@ -34,7 +34,7 @@ public class Form_GiaoDienChinh extends JFrame {
 	private Form_NhanVien nvPanel;
 	private QuanLyNhapHang nhPanel;
 	private QuanLyDonBan dhPanel;
-
+	private Form_ThongKe tkPanel;
 	    private JPanel contentPanel;
 	    private String currentUser;
 	    private UserRoleDAO userRoleDAO;
@@ -70,7 +70,7 @@ public class Form_GiaoDienChinh extends JFrame {
 		nvPanel = new Form_NhanVien();
 		nhPanel = new QuanLyNhapHang();
 		dhPanel = new QuanLyDonBan();
-
+		tkPanel = new Form_ThongKe();
 		mainPanel.add(panelCenter, BorderLayout.CENTER);
 		setContentPane(mainPanel);
 		setVisible(true);
@@ -174,6 +174,9 @@ public class Form_GiaoDienChinh extends JFrame {
 				showPanel(nhPanel);
 			} else if (text.equals("Xuất hàng")) {
 				showPanel(dhPanel);
+			}
+			else if (text.equals("Thống kê")) {
+				showPanel(tkPanel);
 			}
 
 		});

@@ -1,0 +1,96 @@
+package component;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.net.URL;
+import java.util.logging.Logger;
+
+import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
+import javax.swing.JPanel;
+
+public class ImagePanel extends JPanel {
+    private Image image;
+    private int width;
+    private int height;
+    private static final Logger LOGGER = Logger.getLogger(ImagePanel.class.getName());
+
+    public ImagePanel(String imagePath, int width, int height) {
+        this.width = width;
+        this.height = height;
+        
+        try {
+            // First try loading from resources
+            URL imageUrl = imagePath;
+            if (imageUrl != null) {
+                image = new ImageIcon(imageUrl).getImage();
+            } else {
+                // If not in resources, try loading from file system
+                File imageFile = new File(imagePath);
+                if (imageFile.exists()) {
+                    image = ImageIO.read(imageFile);
+                } else {
+                    // If image not found, load default image
+                    imageUrl = getClass().getResource("/images/default-product.png");
+                    if (imageUrl != null) {
+                        image = new ImageIcon(imageUrl).getImage();
+                    } else {
+                        // If even default image not found, create placeholder
+                        image = createPlaceholderImage();
+                    }
+                }
+            }
+            
+            // Scale the image to fit the panel
+            image = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+            
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load image: " + imagePath + ". Error: " + e.getMessage());
+            image = createPlaceholderImage();
+        }
+        
+        setPreferredSize(new Dimension(width, height));
+    }
+
+    private Image createPlaceholderImage() {
+        BufferedImage placeholder = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = placeholder.createGraphics();
+        
+        // Draw placeholder background
+        g2d.setColor(new Color(245, 245, 245));
+        g2d.fillRect(0, 0, width, height);
+        
+        // Draw border
+        g2d.setColor(Color.GRAY);
+        g2d.drawRect(0, 0, width - 1, height - 1);
+        
+        // Draw "No Image" text
+        g2d.setFont(new Font("Arial", Font.PLAIN, 12));
+        FontMetrics fm = g2d.getFontMetrics();
+        String text = "No Image";
+        int textX = (width - fm.stringWidth(text)) / 2;
+        int textY = (height + fm.getAscent()) / 2;
+        g2d.drawString(text, textX, textY);
+        
+        g2d.dispose();
+        return placeholder;
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        if (image != null) {
+            // Center the image in the panel
+            int x = (getWidth() - width) / 2;
+            int y = (getHeight() - height) / 2;
+            g.drawImage(image, x, y, null);
+        }
+    }
+}

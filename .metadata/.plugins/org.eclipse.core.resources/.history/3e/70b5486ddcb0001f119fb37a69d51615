@@ -1,0 +1,239 @@
+package dao;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+import connection.MyConnection;
+import entity.DanhMuc;
+
+public class DanhMucDAO {
+    private static final Logger LOGGER = Logger.getLogger(DanhMucDAO.class.getName());
+    private MyConnection myConnection;
+
+    public DanhMucDAO() {
+        myConnection = new MyConnection();
+    }
+
+    public List<DanhMuc> getAllDanhMuc() {
+        List<DanhMuc> danhSachDanhMuc = new ArrayList<>();
+        String sql = "SELECT * FROM category ORDER BY categoryID";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql);
+             ResultSet rs = pst.executeQuery()) {
+
+            while (rs.next()) {
+                DanhMuc dm = new DanhMuc(
+                    rs.getString("categoryID"),
+                    rs.getString("name"),
+                    rs.getString("note")
+                );
+                danhSachDanhMuc.add(dm);
+            }
+            
+            LOGGER.info("Loaded " + danhSachDanhMuc.size() + " categories");
+            return danhSachDanhMuc;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error loading categories: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    public boolean addDanhMuc(DanhMuc danhMuc) {
+        String sql = "INSERT INTO category (categoryID, name, note) VALUES (?, ?, ?)";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, danhMuc.getMaDM());
+            pst.setString(2, danhMuc.getTenDM());
+            pst.setString(3, danhMuc.getGhiChu());
+
+            int result = pst.executeUpdate();
+            LOGGER.info("Added category: " + danhMuc.getMaDM());
+            return result > 0;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error adding category: " + e.getMessage());
+            return false;
+        }
+    }
+  
+    public boolean updateDanhMuc(DanhMuc danhMuc) {
+        String sql = "UPDATE category SET name = ?, note = ? WHERE categoryID = ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, danhMuc.getTenDM());
+            pst.setString(2, danhMuc.getGhiChu());
+            pst.setString(3, danhMuc.getMaDM());
+
+            int result = pst.executeUpdate();
+            LOGGER.info("Updated category: " + danhMuc.getMaDM());
+            return result > 0;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error updating category: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean deleteDanhMuc(String maDM) {
+        // Use a stored procedure to safely delete the category
+        String sql = "CALL sp_DeleteCategory(?)";
+
+        try (Connection conn = myConnection.connect();
+             CallableStatement cs = conn.prepareCall(sql)) {
+
+            cs.setString(1, maDM);
+            int result = cs.executeUpdate();
+            
+            LOGGER.info("Deleted category: " + maDM);
+            return result > 0;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error deleting category: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public String getLastDanhMucID() {
+        String sql = "SELECT categoryID FROM category ORDER BY CAST(SUBSTRING(categoryID, 4) AS UNSIGNED) DESC LIMIT 1";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql);
+             ResultSet rs = pst.executeQuery()) {
+
+            if (rs.next()) {
+                return rs.getString("categoryID");
+            }
+            return "CAT000";
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error getting last category ID: " + e.getMessage());
+            return "CAT000";
+        }
+    }
+
+    public boolean isDanhMucInUse(String maDM) {
+        String sql = "SELECT COUNT(*) FROM product WHERE category = ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, maDM);
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+            return false;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error checking category usage: " + e.getMessage());
+            return true; // Assume in use for safety
+        }
+    }
+
+    public boolean isTenDanhMucExists(String tenDM) {
+        String sql = "SELECT COUNT(*) FROM category WHERE name = ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, tenDM);
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+            return false;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error checking category name: " + e.getMessage());
+            return true; // Assume exists for safety
+        }
+    }
+
+    public DanhMuc getDanhMucById(String maDM) {
+        String sql = "SELECT * FROM category WHERE categoryID = ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, maDM);
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                return new DanhMuc(
+                    rs.getString("categoryID"),
+                    rs.getString("name"),
+                    rs.getString("note")
+                );
+            }
+            return null;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error getting category by ID: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public DanhMuc getDanhMucByName(String tenDM) {
+        String sql = "SELECT * FROM category WHERE name = ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            pst.setString(1, tenDM);
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                return new DanhMuc(
+                    rs.getString("categoryID"),
+                    rs.getString("name"),
+                    rs.getString("note")
+                );
+            }
+            return null;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error getting category by name: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public List<DanhMuc> searchDanhMuc(String keyword) {
+        List<DanhMuc> ketQua = new ArrayList<>();
+        String sql = "SELECT * FROM category WHERE name LIKE ? OR note LIKE ?";
+
+        try (Connection conn = myConnection.connect();
+             PreparedStatement pst = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pst.setString(1, searchPattern);
+            pst.setString(2, searchPattern);
+
+            ResultSet rs = pst.executeQuery();
+            while (rs.next()) {
+                DanhMuc dm = new DanhMuc(
+                    rs.getString("categoryID"),
+                    rs.getString("name"),
+                    rs.getString("note")
+                );
+                ketQua.add(dm);
+            }
+
+            LOGGER.info("Found " + ketQua.size() + " categories matching: " + keyword);
+            return ketQua;
+
+        } catch (SQLException e) {
+            LOGGER.severe("Error searching categories: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+}

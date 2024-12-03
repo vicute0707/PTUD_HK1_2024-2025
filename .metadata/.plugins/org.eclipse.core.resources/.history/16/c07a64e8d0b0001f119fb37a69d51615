@@ -1,0 +1,157 @@
+package component;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+import java.util.logging.Logger;
+
+public class ImageUploadUtil {
+    // Logger for tracking operations and errors
+    private static final Logger LOGGER = Logger.getLogger(ImageUploadUtil.class.getName());
+    
+    // Define constants for image handling
+    private static final String BASE_RESOURCE_PATH = "src/main/resources";
+    private static final String PRODUCT_IMAGES_PATH = "images/products";
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB maximum file size
+    private static final String[] ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"};
+
+    /**
+     * Uploads a product image and returns the relative path for database storage.
+     * The method handles file validation, naming, and proper storage.
+     *
+     * @param sourceFile The original image file to upload
+     * @param productId The ID of the product this image belongs to
+     * @return The relative path to store in the database
+     * @throws IOException If file operations fail
+     * @throws IllegalArgumentException If the file is invalid
+     */
+    public static String uploadProductImage(File sourceFile, String productId) throws IOException {
+        // Validate the input file
+        validateImageFile(sourceFile);
+
+        // Create a unique filename while preserving the original extension
+        String originalFilename = sourceFile.getName();
+        String fileExtension = getFileExtension(originalFilename);
+        String newFileName = generateUniqueFileName(productId, fileExtension);
+
+        // Create the target directory structure if it doesn't exist
+        Path targetDirectory = createProductImageDirectory(productId);
+
+        // Construct the full target path for the file
+        Path targetPath = targetDirectory.resolve(newFileName);
+
+        // Copy the file to its destination
+        Files.copy(sourceFile.toPath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        // Return the relative path for database storage
+        return constructDatabasePath(productId, newFileName);
+    }
+
+    /**
+     * Validates that the provided file meets all requirements for upload.
+     * Checks file size, format, and existence.
+     */
+    private static void validateImageFile(File file) throws IllegalArgumentException {
+        if (file == null || !file.exists()) {
+            throw new IllegalArgumentException("File does not exist");
+        }
+
+        // Check file size
+        if (file.length() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException(
+                "File size exceeds maximum allowed size of " + (MAX_FILE_SIZE / 1024 / 1024) + "MB");
+        }
+
+        // Validate file extension
+        String extension = getFileExtension(file.getName()).toLowerCase();
+        boolean isValidExtension = false;
+        for (String allowedExt : ALLOWED_EXTENSIONS) {
+            if (allowedExt.equalsIgnoreCase(extension)) {
+                isValidExtension = true;
+                break;
+            }
+        }
+
+        if (!isValidExtension) {
+            throw new IllegalArgumentException("Invalid file format. Allowed formats: JPG, JPEG, PNG");
+        }
+    }
+
+    /**
+     * Creates the directory structure for storing product images.
+     * Each product gets its own directory under the main products folder.
+     */
+    private static Path createProductImageDirectory(String productId) throws IOException {
+        Path directory = Paths.get(BASE_RESOURCE_PATH, PRODUCT_IMAGES_PATH, productId);
+        Files.createDirectories(directory);
+        return directory;
+    }
+
+    /**
+     * Generates a unique filename for the uploaded image.
+     * Combines product ID with a UUID to ensure uniqueness.
+     */
+    private static String generateUniqueFileName(String productId, String extension) {
+        String uniqueId = UUID.randomUUID().toString().substring(0, 8);
+        return productId + "_" + uniqueId + extension;
+    }
+
+    /**
+     * Constructs the relative path for database storage.
+     * This path will be used to retrieve the image later.
+     */
+    private static String constructDatabasePath(String productId, String fileName) {
+        return "/" + PRODUCT_IMAGES_PATH + "/" + productId + "/" + fileName;
+    }
+
+    /**
+     * Extracts the file extension from a filename.
+     */
+    private static String getFileExtension(String fileName) {
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            return fileName.substring(lastDotIndex);
+        }
+        return "";
+    }
+
+    /**
+     * Deletes a product image given its database path.
+     * Useful when updating or removing products.
+     */
+    public static boolean deleteProductImage(String databasePath) {
+        try {
+            if (databasePath == null || databasePath.trim().isEmpty()) {
+                return false;
+            }
+
+            // Convert database path to full system path
+            Path fullPath = Paths.get(BASE_RESOURCE_PATH, databasePath.substring(1));
+            
+            // Delete the file if it exists
+            return Files.deleteIfExists(fullPath);
+        } catch (IOException e) {
+            LOGGER.warning("Failed to delete image at path: " + databasePath);
+            return false;
+        }
+    }
+
+    /**
+     * Updates a product's image, removing the old one if it exists.
+     * Returns the path to the new image.
+     */
+    public static String updateProductImage(File newImageFile, String productId, String oldImagePath) 
+            throws IOException {
+        // Delete the old image if it exists
+        if (oldImagePath != null && !oldImagePath.trim().isEmpty()) {
+            deleteProductImage(oldImagePath);
+        }
+
+        // Upload the new image
+        return uploadProductImage(newImageFile, productId);
+    }
+}

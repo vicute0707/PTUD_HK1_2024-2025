@@ -90,4 +90,16 @@ public class UserSession {
 	public User getCurrentUser() {
 		return currentUser;
 	}
+
+	private UserSession getCurrentLoggedInUser() {
+		// Get the singleton instance of UserSession
+		UserSession userSession = entity.UserSession.getInstance();
+
+		// Check if there's actually a user logged in
+		if (userSession.getCurrentUser() == null) {
+			throw new IllegalStateException("No user is currently logged in");
+		}
+
+		return userSession;
+	}
 }

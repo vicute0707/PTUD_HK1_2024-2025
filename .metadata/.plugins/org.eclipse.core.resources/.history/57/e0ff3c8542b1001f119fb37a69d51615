@@ -1,0 +1,172 @@
+package dao;
+
+import entity.Import;
+import entity.ImportDetail;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDAO {
+	private static final Logger LOGGER = Logger.getLogger(ImportDAO.class.getName());
+	private MyConnection myConnection;
+	private ImportDetailDAO importDetailDAO;
+
+	public ImportDAO() {
+		myConnection = new MyConnection();
+		importDetailDAO = new ImportDetailDAO();
+	}
+
+	public boolean addImport(Import importObj) {
+		Connection conn = null;
+		PreparedStatement pst = null;
+		boolean success = false;
+
+		try {
+			conn = myConnection.connect();
+			conn.setAutoCommit(false); // Start transaction
+
+			// Insert main import record
+			String sql = "INSERT INTO import (importID, importDate, supplier, staff, totalAmount, details) VALUES (?, ?, ?, ?, ?, ?)";
+			pst = conn.prepareStatement(sql);
+			pst.setString(1, importObj.getImportID());
+			pst.setTimestamp(2, new Timestamp(importObj.getImportDate().getTime()));
+			pst.setString(3, importObj.getSupplier());
+			pst.setString(4, importObj.getStaff());
+			pst.setDouble(5, importObj.getTotalAmount());
+			pst.setString(6, importObj.getDetails());
+
+			int result = pst.executeUpdate();
+
+			if (result > 0) {
+				// Insert all import details
+				boolean detailsSuccess = importDetailDAO.addImportDetails(importObj.getImportDetails(), conn);
+
+				if (detailsSuccess) {
+					conn.commit();
+					success = true;
+					LOGGER.info("Successfully added import: " + importObj.getImportID());
+				} else {
+					conn.rollback();
+					LOGGER.warning("Failed to add import details, rolling back");
+				}
+			}
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error adding import: " + e.getMessage());
+			try {
+				if (conn != null)
+					conn.rollback();
+			} catch (SQLException ex) {
+				LOGGER.severe("Error during rollback: " + ex.getMessage());
+			}
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (conn != null) {
+					conn.setAutoCommit(true);
+					conn.close();
+				}
+			} catch (SQLException e) {
+				LOGGER.severe("Error closing resources: " + e.getMessage());
+			}
+		}
+
+		return success;
+	}
+
+	public Import getImportById(String importId) {
+		// SQL query to join import with staff and supplier information
+		String sql = """
+				SELECT i.*, s.name as staff_name
+				FROM import i
+				LEFT JOIN staff s ON i.staff = s.staffID
+				WHERE i.importID = ?
+				""";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, importId);
+
+			try (ResultSet rs = pst.executeQuery()) {
+				if (rs.next()) {
+					// Create and populate the Import object
+					Import importData = new Import();
+					importData.setImportID(rs.getString("importID"));
+					importData.setImportDate(rs.getTimestamp("importDate"));
+					importData.setSupplier(rs.getString("supplier"));
+					importData.setStaff(rs.getString("staff_name")); // Using joined staff name
+					importData.setTotalAmount(rs.getDouble("totalAmount"));
+					importData.setDetails(rs.getString("details"));
+
+					LOGGER.info("Successfully retrieved import: " + importId);
+					return importData;
+				}
+			}
+
+			LOGGER.warning("No import found with ID: " + importId);
+			return null;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Database error retrieving import " + importId + ": " + e.getMessage());
+			throw new RuntimeException("Database error retrieving import", e);
+		}
+	}
+
+	public List<Import> getAllImports() {
+		List<Import> imports = new ArrayList<>();
+		String sql = "SELECT * FROM import ORDER BY importDate DESC";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			while (rs.next()) {
+				Import importObj = createImportFromResultSet(rs);
+				// Load details for this import
+				importObj.setImportDetails(importDetailDAO.getImportDetailsByImportID(importObj.getImportID()));
+				imports.add(importObj);
+			}
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error getting imports: " + e.getMessage());
+		}
+
+		return imports;
+	}
+
+	private Import createImportFromResultSet(ResultSet rs) throws SQLException {
+		Import importObj = new Import();
+		importObj.setImportID(rs.getString("importID"));
+		importObj.setImportDate(rs.getTimestamp("importDate"));
+		importObj.setSupplier(rs.getString("supplier"));
+		importObj.setStaff(rs.getString("staff"));
+		importObj.setTotalAmount(rs.getDouble("totalAmount"));
+		importObj.setDetails(rs.getString("details"));
+		return importObj;
+	}
+
+	public String generateNewImportID() {
+		String lastID = "IMP000";
+		String sql = "SELECT importID FROM import ORDER BY importID DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			if (rs.next()) {
+				lastID = rs.getString("importID");
+			}
+
+			// Extract number and increment
+			int number = Integer.parseInt(lastID.substring(3)) + 1;
+			return String.format("IMP%03d", number);
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error generating import ID: " + e.getMessage());
+			return "IMP001";
+		}
+	}
+}

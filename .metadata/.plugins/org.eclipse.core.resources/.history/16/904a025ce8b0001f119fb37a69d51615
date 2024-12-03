@@ -1,0 +1,153 @@
+package component;
+
+import java.awt.Image;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.logging.Logger;
+import javax.swing.ImageIcon;
+
+public class ImageUploadUtil {
+	private static final Logger LOGGER = Logger.getLogger(ImageUploadUtil.class.getName());
+	private static final String IMAGE_DIRECTORY = "src/img_product";
+	private static final String DEFAULT_IMAGE = "default-product.jpg";
+	private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+	// Initialize the image directory when the class loads
+	static {
+		try {
+			Files.createDirectories(Paths.get(IMAGE_DIRECTORY));
+		} catch (IOException e) {
+			LOGGER.severe("Failed to create image directory: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Updates a product's image, handling both the old and new images carefully.
+	 * This method is the main entry point for image updates in the application.
+	 */
+	public static String updateProductImage(String selectedImagePath, String productId, String currentImageName) {
+		LOGGER.info("Starting image update for product: " + productId);
+		LOGGER.info("Selected new image path: " + selectedImagePath);
+		LOGGER.info("Current image name: " + currentImageName);
+
+		// If no new image is selected, keep the current one
+		if (selectedImagePath == null || selectedImagePath.trim().isEmpty()) {
+			LOGGER.info("No new image selected, keeping current image");
+			return currentImageName != null ? currentImageName : DEFAULT_IMAGE;
+		}
+
+		try {
+			// First, verify the new image file exists
+			File sourceFile = new File(selectedImagePath);
+			if (!sourceFile.exists()) {
+				LOGGER.warning("Selected image file does not exist: " + selectedImagePath);
+				return currentImageName != null ? currentImageName : DEFAULT_IMAGE;
+			}
+
+			// Validate the new image
+			if (!validateImageFile(sourceFile)) {
+				LOGGER.warning("Selected image failed validation");
+				return currentImageName != null ? currentImageName : DEFAULT_IMAGE;
+			}
+
+			// Create new filename with original extension
+			String extension = getFileExtension(sourceFile.getName());
+			String newFileName = productId + extension;
+			Path targetPath = Paths.get(IMAGE_DIRECTORY, newFileName);
+
+			// Delete old image if it exists and isn't the default
+			if (currentImageName != null && !currentImageName.equals(DEFAULT_IMAGE)) {
+				Path oldImagePath = Paths.get(IMAGE_DIRECTORY, currentImageName);
+				try {
+					Files.deleteIfExists(oldImagePath);
+					LOGGER.info("Deleted old image: " + oldImagePath);
+				} catch (IOException e) {
+					LOGGER.warning("Failed to delete old image: " + e.getMessage());
+					// Continue with the update even if delete fails
+				}
+			}
+
+			// Copy new image to destination
+			Files.copy(sourceFile.toPath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+			LOGGER.info("Successfully copied new image to: " + targetPath);
+
+			return newFileName;
+
+		} catch (Exception e) {
+			LOGGER.severe("Failed to update image: " + e.getMessage());
+			// Keep existing image on failure
+			return currentImageName != null ? currentImageName : DEFAULT_IMAGE;
+		}
+	}
+
+	/**
+	 * Validates that an image file meets our requirements. Returns true if valid,
+	 * false if not.
+	 */
+	private static boolean validateImageFile(File file) {
+		try {
+			// Check file size
+			if (file.length() > MAX_FILE_SIZE) {
+				LOGGER.warning("File too large: " + file.length() + " bytes");
+				return false;
+			}
+
+			// Check extension
+			String extension = getFileExtension(file.getName()).toLowerCase();
+			if (!extension.equals(".jpg") && !extension.equals(".jpeg") && !extension.equals(".png")) {
+				LOGGER.warning("Invalid file extension: " + extension);
+				return false;
+			}
+
+			return true;
+		} catch (Exception e) {
+			LOGGER.warning("Error validating file: " + e.getMessage());
+			return false;
+		}
+	}
+
+	/**
+	 * Gets the file extension including the dot.
+	 */
+	private static String getFileExtension(String fileName) {
+		int lastDot = fileName.lastIndexOf('.');
+		return lastDot > 0 ? fileName.substring(lastDot) : "";
+	}
+
+	/**
+	 * Loads a product image for display, with proper error handling.
+	 */
+	public static ImageIcon loadProductImage(String imageName, int width, int height) {
+		try {
+			// Use default image if no name provided
+			if (imageName == null || imageName.trim().isEmpty()) {
+				imageName = DEFAULT_IMAGE;
+			}
+
+			// Construct full path
+			Path imagePath = Paths.get(IMAGE_DIRECTORY, imageName);
+			LOGGER.info("Attempting to load image: " + imagePath);
+
+			// Check if image exists
+			if (!Files.exists(imagePath)) {
+				LOGGER.warning("Image not found: " + imagePath);
+				// Try to load default image instead
+				imagePath = Paths.get(IMAGE_DIRECTORY, DEFAULT_IMAGE);
+				if (!Files.exists(imagePath)) {
+					LOGGER.severe("Default image not found!");
+					return null;
+				}
+			}
+
+			// Load and scale the image
+			ImageIcon originalIcon = new ImageIcon(imagePath.toString());
+			Image scaledImage = originalIcon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH);
+			return new ImageIcon(scaledImage);
+
+		} catch (Exception e) {
+			LOGGER.severe("Error loading image: " + e.getMessage());
+			return null;
+		}
+	}
+}

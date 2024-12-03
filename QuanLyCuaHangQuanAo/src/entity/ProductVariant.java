@@ -6,8 +6,6 @@ public class ProductVariant {
 	private String size;
 	private String color;
 	private int quantity;
-	private double price;
-	private String status;
 
 	// Getters and setters
 	public String getVariantID() {
@@ -50,19 +48,5 @@ public class ProductVariant {
 		this.quantity = quantity;
 	}
 
-	public double getPrice() {
-		return price;
-	}
 
-	public void setPrice(double price) {
-		this.price = price;
-	}
-
-	public String getStatus() {
-		return status;
-	}
-
-	public void setStatus(String status) {
-		this.status = status;
-	}
 }

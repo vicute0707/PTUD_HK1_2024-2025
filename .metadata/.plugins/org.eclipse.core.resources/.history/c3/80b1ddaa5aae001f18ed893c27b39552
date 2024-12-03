@@ -1,0 +1,72 @@
+package dao;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+import connection.MyConnection;
+import entity.ProductVariant;
+
+public class ProductVariantDAO {
+	private static final Logger LOGGER = Logger.getLogger(ProductVariantDAO.class.getName());
+	private MyConnection myConnection;
+
+	public ProductVariantDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public List<ProductVariant> getAllVariantsByProductID(String productID) {
+		List<ProductVariant> variants = new ArrayList();
+		String sql = "SELECT * FROM productvariant WHERE productID = ? ";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+			pst.setString(1, productID);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				ProductVariant variant = createVariantFromResultSet(rs);
+				variants.add(variant);
+			}
+
+			LOGGER.info("Đã lấy " + variants.size() + " biến thể sản phẩm của sản phẩm " + productID);
+			return variants;
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi lấy biến thể sản phẩm: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	private ProductVariant createVariantFromResultSet(ResultSet rs) throws SQLException {
+		ProductVariant variant = new ProductVariant();
+		variant.setVariantID(rs.getString("variantID"));
+		variant.setProductID(rs.getString("productID"));
+		variant.setSize(rs.getString("size"));
+		variant.setColor(rs.getString("color"));
+		variant.setQuantity(rs.getInt("quantity"));
+			return variant;
+	}
+
+	public boolean addVariant(ProductVariant variant) {
+		String sql = "CALL sp_AddVariant(?, ?, ?, ?, ?, ?)";
+
+		try (Connection conn = myConnection.connect(); CallableStatement cs = conn.prepareCall(sql)) {
+			cs.setString(1, variant.getVariantID());
+			cs.setString(2, variant.getProductID());
+			cs.setString(3, variant.getSize());
+			cs.setString(4, variant.getColor());
+			cs.setInt(5, variant.getQuantity());
+			cs.setDouble(6, variant.getPrice());
+
+			boolean result = cs.executeUpdate() > 0;
+			LOGGER.info(
+					"Thêm biến thể sản phẩm " + (result ? "thành công" : "thất bại") + ": " + variant.getVariantID());
+			return result;
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi thêm biến thể sản phẩm: " + e.getMessage());
+			return false;
+		}
+	}
+
+	// Thêm các phương thức cập nhật, xóa biến thể sản phẩm tương tự
+}

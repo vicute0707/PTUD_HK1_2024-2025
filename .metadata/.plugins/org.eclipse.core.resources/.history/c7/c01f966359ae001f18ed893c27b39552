@@ -1,0 +1,222 @@
+package bus;
+
+import dao.SanPhamDAO;
+import entity.SanPham;
+import java.util.ArrayList;
+import java.util.List;
+import java.sql.SQLException;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+
+public class SanPhamBUS {
+	private static final Logger LOGGER = Logger.getLogger(SanPhamBUS.class.getName());
+	private SanPhamDAO sanPhamDAO;
+	private ArrayList<SanPham> dsSanPham;
+
+	public SanPhamBUS() {
+		sanPhamDAO = new SanPhamDAO();
+		dsSanPham = new ArrayList<>();
+	}
+
+	public ArrayList<SanPham> getAllSanPham() {
+		ArrayList<SanPham> dsSanPham = sanPhamDAO.getAllSanPham();
+		// Validate danh sách trước khi trả về
+		if (dsSanPham == null) {
+			LOGGER.warning("Không thể lấy danh sách sản phẩm từ DAO");
+			return new ArrayList<>(); // Trả về list rỗng thay vì null
+		}
+
+		LOGGER.info("Đã lấy " + dsSanPham.size() + " sản phẩm từ database");
+		return dsSanPham;
+	}
+
+	public ArrayList<SanPham> searchSanPham(String keyword, String type) {
+		try {
+			ArrayList<SanPham> allProducts = getAllSanPham();
+			ArrayList<SanPham> searchResults = new ArrayList<>();
+
+			keyword = keyword.toLowerCase().trim();
+
+			for (SanPham sp : allProducts) {
+				boolean matches = false;
+				switch (type) {
+				case "Theo Mã":
+					matches = sp.getMaSP().toLowerCase().contains(keyword);
+					break;
+				case "Tên SP":
+					matches = sp.getTenSP().toLowerCase().contains(keyword);
+					break;
+				case "Tên DM":
+					matches = sp.getDanhmuc().getTenDM().toLowerCase().contains(keyword);
+					break;
+				case "Thương Hiệu":
+					matches = sp.getThuongHieu().toLowerCase().contains(keyword);
+					break;
+				}
+				if (matches) {
+					searchResults.add(sp);
+				}
+			}
+
+			LOGGER.info("Tìm thấy " + searchResults.size() + " kết quả cho từ khóa: " + keyword);
+			return searchResults;
+
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Lỗi khi tìm kiếm sản phẩm", e);
+			return new ArrayList<>();
+		}
+	}
+
+	public boolean addSanPham(SanPham sp) {
+		try {
+			validateSanPham(sp);
+			boolean result = sanPhamDAO.addSanPham(sp);
+			if (result) {
+				LOGGER.info("Thêm sản phẩm thành công: " + sp.getMaSP());
+			} else {
+				LOGGER.warning("Không thể thêm sản phẩm: " + sp.getMaSP());
+			}
+			return result;
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Lỗi khi thêm sản phẩm", e);
+			return false;
+		}
+	}
+
+	public List<SanPham> getProductsByCategory(String maDM) {
+		try {
+			List<SanPham> products = sanPhamDAO.getSanPhamByDanhMuc(maDM);
+			LOGGER.info("Đã lấy " + products.size() + " sản phẩm của danh mục " + maDM);
+			return products;
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi lấy sản phẩm theo danh mục: " + e.getMessage());
+			return List.of();
+		}
+	}
+
+	public boolean updateSanPham(SanPham sp) {
+		try {
+			validateSanPham(sp);
+			boolean result = sanPhamDAO.updateSanPham(sp);
+			if (result) {
+				LOGGER.info("Cập nhật sản phẩm thành công: " + sp.getMaSP());
+			} else {
+				LOGGER.warning("Không thể cập nhật sản phẩm: " + sp.getMaSP());
+			}
+			return result;
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Lỗi khi cập nhật sản phẩm", e);
+			return false;
+		}
+	}
+
+	public boolean deleteSanPham(String maSP) {
+		try {
+			if (maSP == null || maSP.trim().isEmpty()) {
+				throw new IllegalArgumentException("Mã sản phẩm không được để trống");
+			}
+			boolean result = sanPhamDAO.deleteSanPham(maSP);
+			if (result) {
+				LOGGER.info("Xóa sản phẩm thành công: " + maSP);
+			} else {
+				LOGGER.warning("Không thể xóa sản phẩm: " + maSP);
+			}
+			return result;
+		} catch (Exception e) {
+			LOGGER.log(Level.SEVERE, "Lỗi khi xóa sản phẩm", e);
+			return false;
+		}
+	}
+
+	private void validateSanPham(SanPham sp) throws IllegalArgumentException {
+		if (sp == null) {
+			throw new IllegalArgumentException("Sản phẩm không được null");
+		}
+		if (sp.getMaSP() == null || sp.getMaSP().trim().isEmpty()) {
+			throw new IllegalArgumentException("Mã sản phẩm không được để trống");
+		}
+		if (sp.getTenSP() == null || sp.getTenSP().trim().isEmpty()) {
+			throw new IllegalArgumentException("Tên sản phẩm không được để trống");
+		}
+		if (sp.getDanhmuc() == null) {
+			throw new IllegalArgumentException("Danh mục không được để trống");
+		}
+		if (sp.getGiaNhap() < 0) {
+			throw new IllegalArgumentException("Giá nhập không được âm");
+		}
+		if (sp.getGiaBan() < 0) {
+			throw new IllegalArgumentException("Giá bán không được âm");
+		}
+		if (sp.getGiaBan() < sp.getGiaNhap()) {
+			throw new IllegalArgumentException("Giá bán không được nhỏ hơn giá nhập");
+		}
+		if (sp.getSoLuongTonKho() < 0) {
+			throw new IllegalArgumentException("Số lượng tồn không được âm");
+		}
+	}
+
+	public String generateNewProductId() {
+		// Lấy mã sản phẩm cuối cùng từ database
+		String lastId = sanPhamDAO.getLastProductId();
+
+		if (lastId == null || lastId.equals("PRD000")) {
+			return "PRD001";
+		}
+
+		// Tách lấy phần số và tăng lên 1
+		int currentNum = Integer.parseInt(lastId.substring(3));
+		return String.format("PRD%03d", currentNum + 1);
+	}
+
+	// Tìm kiếm theo mã sản phẩm
+	public ArrayList<SanPham> timKiemTheoMa(String ma) {
+		ArrayList<SanPham> ketQua = new ArrayList<>();
+		ma = ma.toLowerCase();
+
+		for (SanPham sp : dsSanPham) {
+			if (sp.getMaSP().toLowerCase().contains(ma)) {
+				ketQua.add(sp);
+			}
+		}
+		return ketQua;
+	}
+
+	// Tìm kiếm theo tên sản phẩm
+	public ArrayList<SanPham> timKiemTheoTen(String ten) {
+		ArrayList<SanPham> ketQua = new ArrayList<>();
+		ten = ten.toLowerCase();
+
+		for (SanPham sp : dsSanPham) {
+			if (sp.getTenSP().toLowerCase().contains(ten)) {
+				ketQua.add(sp);
+			}
+		}
+		return ketQua;
+	}
+
+	// Tìm kiếm theo danh mục
+	public ArrayList<SanPham> timKiemTheoDanhMuc(String tenDM) {
+		ArrayList<SanPham> ketQua = new ArrayList<>();
+		tenDM = tenDM.toLowerCase();
+
+		for (SanPham sp : dsSanPham) {
+			if (sp.getDanhmuc().getTenDM().toLowerCase().contains(tenDM)) {
+				ketQua.add(sp);
+			}
+		}
+		return ketQua;
+	}
+
+	// Tìm kiếm theo thương hiệu
+	public ArrayList<SanPham> timKiemTheoThuongHieu(String thuongHieu) {
+		ArrayList<SanPham> ketQua = new ArrayList<>();
+		thuongHieu = thuongHieu.toLowerCase();
+
+		for (SanPham sp : dsSanPham) {
+			if (sp.getThuongHieu().toLowerCase().contains(thuongHieu)) {
+				ketQua.add(sp);
+			}
+		}
+		return ketQua;
+	}
+}

@@ -14,6 +14,7 @@ public class SanPhamBUS {
 	private ArrayList<SanPham> dsSanPham;
 
 	public SanPhamBUS() {
+
 		sanPhamDAO = new SanPhamDAO();
 		dsSanPham = new ArrayList<>();
 	}
@@ -28,6 +29,19 @@ public class SanPhamBUS {
 
 		LOGGER.info("Đã lấy " + dsSanPham.size() + " sản phẩm từ database");
 		return dsSanPham;
+	}
+
+	public SanPham getSanPhamById(String maSP) throws Exception {
+		if (maSP == null || maSP.trim().isEmpty()) {
+			throw new IllegalArgumentException("Product ID cannot be null or empty");
+		}
+
+		SanPham sanPham = sanPhamDAO.getSanPhamByID(maSP);
+		if (sanPham == null) {
+			throw new Exception("Product not found with ID: " + maSP);
+		}
+
+		return sanPham;
 	}
 
 	public ArrayList<SanPham> searchSanPham(String keyword, String type) {
@@ -83,15 +97,9 @@ public class SanPhamBUS {
 		}
 	}
 
-	public List<SanPham> getProductsByCategory(String maDM) {
-		try {
-			List<SanPham> products = sanPhamDAO.getSanPhamByDanhMuc(maDM);
-			LOGGER.info("Đã lấy " + products.size() + " sản phẩm của danh mục " + maDM);
-			return products;
-		} catch (Exception e) {
-			LOGGER.severe("Lỗi lấy sản phẩm theo danh mục: " + e.getMessage());
-			return List.of();
-		}
+	public List<SanPham> getSanPhamByCategory(String categoryId) {
+		// Get products from database through DAO
+		return sanPhamDAO.getSanPhamByCategory(categoryId);
 	}
 
 	public boolean updateSanPham(SanPham sp) {
@@ -138,18 +146,7 @@ public class SanPhamBUS {
 		if (sp.getTenSP() == null || sp.getTenSP().trim().isEmpty()) {
 			throw new IllegalArgumentException("Tên sản phẩm không được để trống");
 		}
-		if (sp.getDanhmuc() == null) {
-			throw new IllegalArgumentException("Danh mục không được để trống");
-		}
-		if (sp.getGiaNhap() < 0) {
-			throw new IllegalArgumentException("Giá nhập không được âm");
-		}
-		if (sp.getGiaBan() < 0) {
-			throw new IllegalArgumentException("Giá bán không được âm");
-		}
-		if (sp.getGiaBan() < sp.getGiaNhap()) {
-			throw new IllegalArgumentException("Giá bán không được nhỏ hơn giá nhập");
-		}
+		
 		if (sp.getSoLuongTonKho() < 0) {
 			throw new IllegalArgumentException("Số lượng tồn không được âm");
 		}
@@ -218,5 +215,69 @@ public class SanPhamBUS {
 			}
 		}
 		return ketQua;
+	}
+
+	public String getLastProductId() {
+		SanPhamDAO dao = new SanPhamDAO();
+		String lastId = dao.getLastProductId();
+
+		if (lastId == null || lastId.isEmpty()) {
+			return "PRD000";
+		}
+
+		try {
+			int number = Integer.parseInt(lastId.substring(3));
+			return String.format("PRD%03d", number);
+		} catch (NumberFormatException e) {
+			LOGGER.severe("Error parsing product ID: " + e.getMessage());
+			return "PRD000";
+		}
+	}
+
+	public List<SanPham> searchProductsByName(String keyword) {
+		// Input validation with logging
+		if (keyword == null || keyword.trim().isEmpty()) {
+			LOGGER.warning("Search attempted with empty keyword");
+			return new ArrayList<>();
+		}
+
+		try {
+			// Ensure we have the latest data
+			refreshDanhSachSanPham();
+
+			// Create a new list for search results
+			ArrayList<SanPham> searchResults = new ArrayList<>();
+
+			// Convert keyword to lowercase for case-insensitive search
+			String searchKeyword = keyword.toLowerCase().trim();
+
+			// Search through the in-memory product list
+			for (SanPham product : dsSanPham) {
+				if (product.getTenSP() != null && product.getTenSP().toLowerCase().contains(searchKeyword)) {
+					searchResults.add(product);
+				}
+			}
+
+			// Log search results
+			LOGGER.info(String.format("Found %d products matching keyword '%s'", searchResults.size(), keyword));
+
+			return searchResults;
+
+		} catch (Exception e) {
+			LOGGER.severe("Error during product search: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	// Helper method to refresh product list
+	private void refreshDanhSachSanPham() {
+		dsSanPham = sanPhamDAO.getAllSanPham();
+	}
+
+	// Helper method to validate product data
+	private boolean isValidProduct(SanPham product) {
+		return product != null && product.getMaSP() != null && !product.getMaSP().trim().isEmpty()
+				&& product.getTenSP() != null && !product.getTenSP().trim().isEmpty()
+				&& product.getSoLuongTonKho() >= 0;
 	}
 }

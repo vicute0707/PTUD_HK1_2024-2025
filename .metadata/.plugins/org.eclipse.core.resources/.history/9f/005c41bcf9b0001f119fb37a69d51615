@@ -1,0 +1,163 @@
+package dialog;
+
+import entity.Import;
+import entity.ImportDetail;
+import bus.ImportBUS;
+import bus.ImportDetailBUS;
+import java.awt.*;
+import java.text.NumberFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.logging.Logger;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+
+import com.formdev.flatlaf.fonts.roboto.FlatRobotoFont;
+
+public class ChiTietPhieuNhap extends JDialog {
+    private static final Logger LOGGER = Logger.getLogger(ChiTietPhieuNhap.class.getName());
+    private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+    private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 14);
+    private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
+    
+    private ImportBUS importBUS;
+    private ImportDetailBUS importDetailBUS;
+    private final NumberFormat currencyFormatter;
+
+    public ChiTietPhieuNhap() {
+        importBUS = new ImportBUS();
+        importDetailBUS = new ImportDetailBUS();
+        // Set up currency formatter for Vietnamese Dong
+        currencyFormatter = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
+    }
+
+    public void chiTietPhieuNhap(JTable table, DefaultTableModel mainTableModel) {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this,
+                "Vui lòng chọn phiếu nhập cần xem chi tiết!",
+                "Thông báo",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            // Get the import ID from selected row
+            String importId = table.getValueAt(selectedRow, 0).toString();
+            
+            // Fetch complete import data from database
+            Import importData = importBUS.getImportById(importId);
+            if (importData == null) {
+                throw new Exception("Không tìm thấy thông tin phiếu nhập");
+            }
+
+            // Fetch import details
+            List<ImportDetail> details = importDetailBUS.getImportDetailsByImportId(importId);
+            
+            // Create and show the detail dialog
+            showDetailDialog(importData, details);
+
+        } catch (Exception e) {
+            LOGGER.severe("Error loading import details: " + e.getMessage());
+            JOptionPane.showMessageDialog(this,
+                "Lỗi khi tải thông tin chi tiết: " + e.getMessage(),
+                "Lỗi",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showDetailDialog(Import importData, List<ImportDetail> details) {
+        // Create dialog with basic setup
+        JDialog detailDialog = createBaseDialog();
+        
+        // Create main content panel
+        JPanel contentPanel = new JPanel();
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        contentPanel.setBackground(Color.WHITE);
+        contentPanel.setBorder(new EmptyBorder(20, 30, 20, 30));
+
+        // Add header information
+        contentPanel.add(createHeaderPanel(importData));
+        contentPanel.add(Box.createVerticalStrut(20));
+
+        // Add detail table
+        contentPanel.add(createDetailTablePanel(details));
+        
+        // Add footer with totals
+        contentPanel.add(createFooterPanel(importData.getTotalAmount()));
+
+        // Add button panel
+        JPanel buttonPanel = createButtonPanel(detailDialog, importData.getImportID());
+
+        // Add panels to dialog
+        detailDialog.add(contentPanel, BorderLayout.CENTER);
+        detailDialog.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Show dialog
+        detailDialog.setSize(800, 600);
+        detailDialog.setLocationRelativeTo(null);
+        detailDialog.setVisible(true);
+    }
+
+    private JPanel createDetailTablePanel(List<ImportDetail> details) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(Color.WHITE);
+
+        // Create table model with columns
+        String[] columns = {"STT", "Mã SP", "Tên sản phẩm", "Số lượng", "Đơn giá", "Thành tiền"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        // Add details to table
+        int stt = 1;
+        for (ImportDetail detail : details) {
+            double thanhTien = detail.getQuantity() * detail.getPrice();
+            Object[] row = {
+                stt++,
+                detail.getVariantID(),
+                getProductName(detail.getVariantID()), // You'll need to implement this method
+                detail.getQuantity(),
+                currencyFormatter.format(detail.getPrice()),
+                currencyFormatter.format(thanhTien)
+            };
+            model.addRow(row);
+        }
+
+        // Create and set up table
+        JTable detailTable = new JTable(model);
+        setupDetailTable(detailTable);
+
+        // Create scroll pane
+        JScrollPane scrollPane = new JScrollPane(detailTable);
+        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230, 230, 230)));
+        
+        // Style the scroll bars
+        scrollPane.getVerticalScrollBar().setUI(mew CustomScrollBarUI);
+        scrollPane.getHorizontalScrollBar().setUI(new CustomScrollBarUI());
+
+        panel.add(new JLabel("Chi tiết sản phẩm"), BorderLayout.NORTH);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    // Helper method to get product name - this should connect to your product service
+    private String getProductName(String variantId) {
+        // Implement your logic to get product name from variant ID
+        // This might involve looking up the product in your database
+        return "Product " + variantId; // Placeholder implementation
+    }
+
+    // Custom ScrollBarUI implementation
+    private class CustomScrollBarUI extends BasicScrollBarUI {
+        @Override
+        protected void configureScrollBarColors() {
+            this.thumbColor = PRIMARY_COLOR;
+            this.trackColor = new Color(245, 245, 245);
+        }
+    }
+}

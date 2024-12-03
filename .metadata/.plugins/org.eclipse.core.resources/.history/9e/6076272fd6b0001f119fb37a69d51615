@@ -1,0 +1,46 @@
+package component;
+
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.logging.Logger;
+
+import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
+
+public class ProductCardImageLoader {
+    private static final String IMAGE_DIRECTORY = "src/img_product";
+    private static final String DEFAULT_IMAGE_NAME = "default-product.jpg";
+    private static final Logger LOGGER = Logger.getLogger(ProductCardImageLoader.class.getName());
+
+    public static ImageIcon loadProductImage(String imageName, int width, int height) {
+        try {
+            // Get image path
+            String fileName = imageName != null ? imageName : DEFAULT_IMAGE_NAME;
+            Path imagePath = Paths.get(IMAGE_DIRECTORY, fileName);
+
+            // Load and scale image
+            if (Files.exists(imagePath)) {
+                BufferedImage img = ImageIO.read(imagePath.toFile());
+                Image scaled = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                return new ImageIcon(scaled);
+            }
+            
+            // Load default image if product image doesn't exist
+            Path defaultPath = Paths.get(IMAGE_DIRECTORY, DEFAULT_IMAGE_NAME);
+            if (Files.exists(defaultPath)) {
+                BufferedImage img = ImageIO.read(defaultPath.toFile());
+                Image scaled = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                return new ImageIcon(scaled);
+            }
+
+            return null;
+        } catch (IOException e) {
+            LOGGER.warning("Error loading image: " + e.getMessage());
+            return null;
+        }
+    }
+}

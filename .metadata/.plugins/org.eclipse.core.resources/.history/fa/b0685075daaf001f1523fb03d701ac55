@@ -1,0 +1,280 @@
+package dialog;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
+
+import bus.SanPhamBUS;
+import entity.SanPham;
+import entity.PhanLoaiSanPham;
+import java.awt.*;
+import java.awt.event.*;
+
+public class EditSanPham extends JDialog {
+	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
+	private static final Font HEADER_FONT = new Font("Segoe UI", Font.BOLD, 24);
+	private static final Font LABEL_FONT = new Font("Segoe UI", Font.PLAIN, 14);
+	private static final Font CONTENT_FONT = new Font("Segoe UI", Font.PLAIN, 14);
+
+	private JTextField txtMauSac, txtKichCo, txtChatLieu;
+	private DefaultTableModel tableModel;
+	private int selectedRow;
+	private static final Color PASTEL_PINK = new Color(255, 255, 255); // Màu hồng pastel nhẹ nhàng
+	private static final Color DARK_PINK = new Color(219, 39, 119); // Màu hồng đậm cho các nút
+	private static final Color LIGHT_PINK = new Color(252, 231, 243); // Màu hồng nhạt cho hover
+	private static final Font TITLE_FONT = new Font("Arial", Font.BOLD, 24);
+
+	private static final Font INPUT_FONT = new Font("Segoe UI", Font.PLAIN, 14);
+	private static final Font BUTTON_FONT = new Font("Segoe UI", Font.BOLD, 14);
+
+	private JTextField txtTenSP, txtDanhMuc, txtTonKho, txtGiaBan, txtGiaNhap, txtThuongHieu;
+	private JTextArea txtMoTa;
+	private JLabel lblImage;
+	private String imagePath = "";
+	private boolean isConfirmed = false;
+	private SanPhamBUS sanPhamBUS;
+
+	private String maSP;
+	private PhanLoaiSanPham plsp = new PhanLoaiSanPham();
+
+	public EditSanPham(Frame owner, DefaultTableModel tableModel, int selectedRow) {
+		super(owner, "Sửa Sản Phẩm", true);
+		this.tableModel = tableModel;
+		this.selectedRow = selectedRow;
+		this.sanPhamBUS = new SanPhamBUS();
+		this.maSP = (String) tableModel.getValueAt(selectedRow, 0);
+		initComponents();
+		loadProductData();
+	}
+
+	private void initComponents() {
+		setLayout(new BorderLayout(0, 20));
+		setBackground(Color.WHITE);
+
+		// Header Panel
+		JPanel headerPanel = new JPanel();
+		headerPanel.setBackground(Color.WHITE);
+		JLabel headerLabel = new JLabel("CHỈNH SỬA SẢN PHẨM", SwingConstants.CENTER);
+		headerLabel.setFont(HEADER_FONT);
+		headerLabel.setForeground(PRIMARY_COLOR);
+		headerPanel.add(headerLabel);
+
+		// Main Content Panel
+		JPanel mainPanel = new JPanel(new BorderLayout(20, 0));
+		mainPanel.setBackground(Color.WHITE);
+		mainPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+
+		// Left Panel - Image
+		JPanel imagePanel = createImagePanel();
+
+		// Right Panel - Form
+		JPanel formPanel = createFormPanel();
+
+		mainPanel.add(imagePanel, BorderLayout.WEST);
+		mainPanel.add(formPanel, BorderLayout.CENTER);
+
+		// Button Panel
+		JPanel buttonPanel = createButtonPanel();
+
+		// Add all panels to dialog
+		add(headerPanel, BorderLayout.NORTH);
+		add(mainPanel, BorderLayout.CENTER);
+		add(buttonPanel, BorderLayout.SOUTH);
+
+		setSize(900, 600);
+		setLocationRelativeTo(owner);
+	}
+	  private JPanel createButtonPanel() {
+	        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 15));
+	        panel.setBackground(Color.WHITE);
+
+	        JButton btnAdd = createStyledButton("Thêm phân loại", PRIMARY_COLOR);
+	        JButton btnCancel = createStyledButton("Hủy", new Color(156, 163, 175));
+
+	        btnAdd.addActionListener(e -> openPhanLoaiDialog());
+	        btnCancel.addActionListener(e -> dispose());
+
+	        panel.add(btnAdd);
+	        panel.add(btnCancel);
+
+	        return panel;
+	    }
+
+
+	private JButton createStyledButton(String text, Color bgColor) {
+		JButton button = new JButton(text);
+		button.setFont(BUTTON_FONT);
+		button.setPreferredSize(new Dimension(130, 40));
+		button.setBackground(bgColor);
+		button.setForeground(Color.WHITE);
+		button.setBorderPainted(false);
+		button.setFocusPainted(false);
+
+		// Thêm hiệu ứng hover
+		button.addMouseListener(new MouseAdapter() {
+			public void mouseEntered(MouseEvent e) {
+				button.setBackground(bgColor.brighter());
+			}
+
+			public void mouseExited(MouseEvent e) {
+				button.setBackground(bgColor);
+			}
+		});
+
+		return button;
+	}
+
+	private JPanel createImagePanel() {
+		JPanel panel = new JPanel(new BorderLayout(0, 10));
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new EmptyBorder(0, 0, 0, 20));
+
+		lblImage = new JLabel();
+		lblImage.setPreferredSize(new Dimension(200, 200));
+		lblImage.setBorder(BorderFactory.createLineBorder(PRIMARY_COLOR));
+		lblImage.setHorizontalAlignment(SwingConstants.CENTER);
+
+		JButton btnChooseImage = createStyledButton("Chọn ảnh", PRIMARY_COLOR);
+		btnChooseImage.addActionListener(e -> chooseImage());
+
+		panel.add(lblImage, BorderLayout.CENTER);
+		panel.add(btnChooseImage, BorderLayout.SOUTH);
+
+		return panel;
+	}
+
+	private JPanel createFormPanel() {
+		JPanel panel = new JPanel(new GridBagLayout());
+		panel.setBackground(Color.WHITE);
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.insets = new Insets(5, 5, 5, 5);
+
+		// Initialize components
+		txtMaSP = createStyledTextField();
+		txtMaSP.setEditable(false);
+		txtTenSP = createStyledTextField();
+		txtGiaBan = createStyledTextField();
+		txtGiaNhap = createStyledTextField();
+		txtSoLuongTon = createStyledTextField();
+		txtThuongHieu = createStyledTextField();
+		cboDanhMuc = new JComboBox<>();
+		txtMoTa = new JTextArea(4, 20);
+		styleTextArea(txtMoTa);
+
+		// Add components to panel
+		addFormRow(panel, "Mã sản phẩm:", txtMaSP, 0);
+		addFormRow(panel, "Tên sản phẩm:", txtTenSP, 1);
+		addFormRow(panel, "Danh mục:", cboDanhMuc, 2);
+		addFormRow(panel, "Giá bán:", txtGiaBan, 3);
+		addFormRow(panel, "Giá nhập:", txtGiaNhap, 4);
+		addFormRow(panel, "Số lượng tồn:", txtSoLuongTon, 5);
+		addFormRow(panel, "Thương hiệu:", txtThuongHieu, 6);
+		addFormRow(panel, "Mô tả:", new JScrollPane(txtMoTa), 7);
+
+		return panel;
+	}
+
+	private void addFormRow(JPanel panel, String labelText, JComponent component, int row) {
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.gridx = 0;
+		gbc.gridy = row;
+		gbc.anchor = GridBagConstraints.WEST;
+		gbc.insets = new Insets(5, 5, 5, 15);
+
+		JLabel label = new JLabel(labelText);
+		label.setFont(LABEL_FONT);
+		panel.add(label, gbc);
+
+		gbc.gridx = 1;
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.weightx = 1.0;
+		panel.add(component, gbc);
+	}
+
+	private void loadProductData() {
+		try {
+			SanPham sp = sanPhamBUS.getSanPhamById(maSP);
+			if (sp != null) {
+				txtMaSP.setText(sp.getMaSP());
+				txtTenSP.setText(sp.getTenSP());
+				txtGiaBan.setText(String.valueOf(sp.getGiaBan()));
+				txtGiaNhap.setText(String.valueOf(sp.getGiaNhap()));
+				txtSoLuongTon.setText(String.valueOf(sp.getSoLuongTonKho()));
+				txtThuongHieu.setText(sp.getThuongHieu());
+				txtMoTa.setText(sp.getMoTa());
+
+				// Load danh mục
+				loadDanhMucComboBox();
+				cboDanhMuc.setSelectedItem(sp.getDanhmuc().getTenDM());
+
+				// Load image if exists
+				if (sp.getHinhAnh() != null && !sp.getHinhAnh().isEmpty()) {
+					imagePath = sp.getHinhAnh();
+					displayImage(imagePath);
+				}
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi tải dữ liệu sản phẩm: " + e.getMessage());
+		}
+	}
+
+	private JTextField createStyledTextField() {
+		JTextField textField = new JTextField(20);
+		textField.setFont(INPUT_FONT);
+		textField.setPreferredSize(new Dimension(250, 35));
+		textField.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(DARK_PINK),
+				BorderFactory.createEmptyBorder(5, 10, 5, 10)));
+		textField.setBackground(Color.WHITE);
+		return textField;
+	}
+
+	private void saveChanges() {
+		try {
+			// Validate input
+			if (!validateInput()) {
+				return;
+			}
+
+			// Create updated SanPham object
+			SanPham sp = new SanPham();
+			sp.setMaSP(txtMaSP.getText());
+			sp.setTenSP(txtTenSP.getText());
+			sp.setGiaBan(Double.parseDouble(txtGiaBan.getText()));
+			sp.setGiaNhap(Double.parseDouble(txtGiaNhap.getText()));
+			sp.setSoLuongTonKho(Integer.parseInt(txtSoLuongTon.getText()));
+			sp.setThuongHieu(txtThuongHieu.getText());
+			sp.setMoTa(txtMoTa.getText());
+			sp.setHinhAnh(imagePath);
+
+			// Update in database
+			if (sanPhamBUS.updateSanPham(sp)) {
+				JOptionPane.showMessageDialog(this, "Cập nhật sản phẩm thành công!");
+				isConfirmed = true;
+				dispose();
+			} else {
+				JOptionPane.showMessageDialog(this, "Cập nhật sản phẩm thất bại!");
+			}
+		} catch (Exception e) {
+			JOptionPane.showMessageDialog(this, "Lỗi khi cập nhật sản phẩm: " + e.getMessage());
+		}
+	}
+
+	private void chooseImage() {
+		JFileChooser fileChooser = new JFileChooser();
+		if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+			imagePath = fileChooser.getSelectedFile().getAbsolutePath();
+			displayImage(imagePath);
+		}
+	}
+
+	private void openPhanLoaiDialog() {
+		SuaPhanLoai dialog = new SuaPhanLoai((Frame) SwingUtilities.getWindowAncestor(this));
+		dialog.setVisible(true);
+	}
+	  public boolean isConfirmed() {
+	        return isConfirmed;
+	    }
+	  
+
+}

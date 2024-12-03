@@ -1,0 +1,153 @@
+package export;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import entity.Import;
+import entity.ImportDetail;
+
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.List;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+
+public class ExcelExporterDonNhap {
+    private static final Logger LOGGER = Logger.getLogger(ExcelExporterDonNhap.class.getName());
+    private static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+
+    /**
+     * Exports import orders to an Excel file. Uses streaming to handle large datasets efficiently.
+     */
+    public static void exportImports(List<Import> imports, String filePath) throws Exception {
+        LOGGER.info("Starting export of " + imports.size() + " import orders to " + filePath);
+        
+        // Use SXSSFWorkbook for better memory handling with large datasets
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(100)) { // Keep 100 rows in memory
+            // Create styles
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle dataStyle = createDataStyle(workbook);
+            
+            // Create summary sheet
+            Sheet summarySheet = workbook.createSheet("Danh sách phiếu nhập");
+            createSummarySheet(summarySheet, imports, headerStyle, dataStyle);
+            
+            // Create detail sheet
+            Sheet detailSheet = workbook.createSheet("Chi tiết phiếu nhập");
+            createDetailSheet(detailSheet, imports, headerStyle, dataStyle);
+            
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+                LOGGER.info("Successfully exported data to " + filePath);
+            }
+            
+            // Clean up temporary files
+            workbook.dispose();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error during export", e);
+            throw new Exception("Lỗi khi xuất file Excel: " + e.getMessage());
+        }
+    }
+
+    private static void createSummarySheet(Sheet sheet, List<Import> imports, 
+            CellStyle headerStyle, CellStyle dataStyle) {
+        // Create headers
+        Row headerRow = sheet.createRow(0);
+        String[] headers = {"Mã phiếu", "Nhà cung cấp", "Nhân viên", "Thời gian", "Tổng tiền"};
+        
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        // Add data rows
+        int rowNum = 1;
+        for (Import importOrder : imports) {
+            Row row = sheet.createRow(rowNum++);
+            
+            row.createCell(0).setCellValue(importOrder.getImportID());
+            row.createCell(1).setCellValue(importOrder.getSupplier());
+            row.createCell(2).setCellValue(importOrder.getStaff());
+            row.createCell(3).setCellValue(DATE_FORMATTER.format(importOrder.getImportDate()));
+            row.createCell(4).setCellValue(String.format("%,d VND", Math.round(importOrder.getTotalAmount())));
+            
+            // Apply data style to all cells
+            for (int i = 0; i < 5; i++) {
+                row.getCell(i).setCellStyle(dataStyle);
+            }
+        }
+
+        // Auto-size columns
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private static void createDetailSheet(Sheet sheet, List<Import> imports, 
+            CellStyle headerStyle, CellStyle dataStyle) {
+        // Create headers
+        Row headerRow = sheet.createRow(0);
+        String[] headers = {"Mã phiếu", "Mã SP", "Tên sản phẩm", "Phân loại", 
+                           "Đơn giá", "Số lượng", "Thành tiền"};
+        
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        // Add data rows
+        int rowNum = 1;
+        for (Import importOrder : imports) {
+            for (ImportDetail detail : importOrder.getImportDetails()) {
+                Row row = sheet.createRow(rowNum++);
+                
+                row.createCell(0).setCellValue(importOrder.getImportID());
+                row.createCell(1).setCellValue(detail.getVariantID());
+                row.createCell(2).setCellValue(detail.getProductName());
+                row.createCell(3).setCellValue(detail.getVariantName());
+                row.createCell(4).setCellValue(String.format("%,d VND", Math.round(detail.getPrice())));
+                row.createCell(5).setCellValue(detail.getQuantity());
+                row.createCell(6).setCellValue(String.format("%,d VND", 
+                    Math.round(detail.getPrice() * detail.getQuantity())));
+                
+                // Apply data style to all cells
+                for (int i = 0; i < 7; i++) {
+                    row.getCell(i).setCellStyle(dataStyle);
+                }
+            }
+        }
+
+        // Auto-size columns
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private static CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        setBorders(style);
+        return style;
+    }
+
+    private static CellStyle createDataStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setAlignment(HorizontalAlignment.LEFT);
+        setBorders(style);
+        return style;
+    }
+
+    private static void setBorders(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+    }
+}

@@ -1,0 +1,60 @@
+package dao;
+
+import entity.ImportDetail;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+public class ImportDetailDAO {
+	   private static final Logger LOGGER = Logger.getLogger(ImportDetailDAO.class.getName());
+	    private MyConnection myConnection;
+	    private ProductVariantDAO variantDAO;
+
+	public ImportDetailDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public boolean addImportDetails(List<ImportDetail> details, Connection conn) throws SQLException {
+		String sql = "INSERT INTO importdetail (importID, variantID, quantity, price) VALUES (?, ?, ?, ?)";
+
+		try (PreparedStatement pst = conn.prepareStatement(sql)) {
+			for (ImportDetail detail : details) {
+				pst.setString(1, detail.getImportID());
+				pst.setString(2, detail.getVariantID());
+				pst.setInt(3, detail.getQuantity());
+				pst.setDouble(4, detail.getPrice());
+				pst.addBatch();
+			}
+
+			int[] results = pst.executeBatch();
+			return results.length == details.size();
+		}
+	}
+
+	public List<ImportDetail> getImportDetailsByImportID(String importID) {
+		List<ImportDetail> details = new ArrayList<>();
+		String sql = "SELECT * FROM importdetail WHERE importID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, importID);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				ImportDetail detail = new ImportDetail();
+				detail.setImportID(rs.getString("importID"));
+				detail.setVariantID(rs.getString("variantID"));
+				detail.setQuantity(rs.getInt("quantity"));
+				detail.setPrice(rs.getDouble("price"));
+				details.add(detail);
+			}
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error getting import details: " + e.getMessage());
+		}
+
+		return details;
+	}
+}

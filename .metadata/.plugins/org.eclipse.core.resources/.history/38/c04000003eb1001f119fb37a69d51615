@@ -1,0 +1,97 @@
+package bus;
+
+import dao.ImportDAO;
+import entity.Import;
+import entity.ImportDetail;
+import java.util.List;
+import java.util.Date;
+import java.util.logging.Logger;
+
+public class ImportBUS {
+    private static final Logger LOGGER = Logger.getLogger(ImportBUS.class.getName());
+    private ImportDAO importDAO;
+
+    public ImportBUS() {
+        importDAO = new ImportDAO();
+    }
+
+    public boolean createImport(Import importObj) {
+        // Validate import data
+        if (!validateImport(importObj)) {
+            return false;
+        }
+
+        // Generate new import ID if not set
+        if (importObj.getImportID() == null || importObj.getImportID().trim().isEmpty()) {
+            importObj.setImportID(importDAO.generateNewImportID());
+        }
+
+        // Set import date if not set
+        if (importObj.getImportDate() == null) {
+            importObj.setImportDate(new Date());
+        }
+
+        // Calculate total amount based on details
+        double totalAmount = importObj.getImportDetails().stream()
+            .mapToDouble(ImportDetail::getTotal)
+            .sum();
+        importObj.setTotalAmount(totalAmount);
+
+        return importDAO.addImport(importObj);
+    }
+
+    private boolean validateImport(Import importObj) {
+        if (importObj == null) {
+            LOGGER.warning("Import object is null");
+            return false;
+        }
+
+        if (importObj.getSupplier() == null || importObj.getSupplier().trim().isEmpty()) {
+            LOGGER.warning("Supplier is required");
+            return false;
+        }
+
+        if (importObj.getStaff() == null || importObj.getStaff().trim().isEmpty()) {
+            LOGGER.warning("Staff is required");
+            return false;
+        }
+
+        if (importObj.getImportDetails() == null || importObj.getImportDetails().isEmpty()) {
+            LOGGER.warning("Import must have at least one detail");
+            return false;
+        }
+
+        // Validate each detail
+        for (ImportDetail detail : importObj.getImportDetails()) {
+            if (!validateImportDetail(detail)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    
+
+    private boolean validateImportDetail(ImportDetail detail) {
+        if (detail.getVariantID() == null || detail.getVariantID().trim().isEmpty()) {
+            LOGGER.warning("Variant ID is required");
+            return false;
+        }
+
+        if (detail.getQuantity() <= 0) {
+            LOGGER.warning("Quantity must be greater than 0");
+            return false;
+        }
+
+        if (detail.getPrice() <= 0) {
+            LOGGER.warning("Price must be greater than 0");
+            return false;
+        }
+
+        return true;
+    }
+
+    public List<Import> getAllImports() {
+        return importDAO.getAllImports();
+    }
+}

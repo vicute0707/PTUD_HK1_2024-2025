@@ -16,9 +16,9 @@ public class SetupTable {
 	private static final Color PRIMARY_COLOR = new Color(219, 39, 119);
 	private static final Color CONTENT_COLOR = new Color(255, 242, 242);
 	private static final Color HOVER_COLOR = new Color(252, 231, 243);
-	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 14);
+	private static final Font HEADER_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
 	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
-	private static final Font TITLE_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 16);
+	private static final Font TITLE_FONT = new Font(FlatRobotoFont.FAMILY, Font.BOLD, 12);
 	public void setupTable(JTable table) {
 		table.setFont(CONTENT_FONT);
 		table.setRowHeight(40);

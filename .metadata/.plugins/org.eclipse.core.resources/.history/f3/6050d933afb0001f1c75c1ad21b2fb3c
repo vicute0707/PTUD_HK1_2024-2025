@@ -1,0 +1,33 @@
+package style;
+
+import java.util.logging.Logger;
+
+import javax.swing.JButton;
+
+import gui.Form_SanPham;
+import service.PermissionChecker;
+
+public class ConfigureButtonWithPermission {
+	
+
+	public void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action,Logger LOGGER,String infoClass) {
+		 LOGGER = Logger.getLogger(infoClass);
+		LOGGER.info("Configuring button for user: " + userId + " permission: " + permission);
+
+		if (PermissionChecker.hasPermission(userId, permission)) {
+			LOGGER.info("Permission granted");
+			button.setEnabled(true);
+			button.addActionListener(e -> {
+				if (button.isEnabled()) {
+					action.run();
+				}
+			});
+		} else {
+			LOGGER.warning("Permission denied");
+			button.setEnabled(false);
+			String permissionDesc = PermissionChecker.getPermissionDescription(permission);
+			button.setToolTipText("Bạn không có quyền " + permissionDesc);
+		}
+	}
+
+}

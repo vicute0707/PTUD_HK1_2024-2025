@@ -1,0 +1,90 @@
+package component;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.util.logging.Logger;
+import javax.swing.ImageIcon;
+import javax.swing.JPanel;
+
+public class ImagePanel extends JPanel {
+    private Image image;
+    private int width;
+    private int height;
+    private static final Logger LOGGER = Logger.getLogger(ImagePanel.class.getName());
+    
+    public ImagePanel(String imagePath, int width, int height) {
+        this.width = width;
+        this.height = height;
+        
+        try {
+            // Get the project's root directory path
+            String projectPath = System.getProperty("user.dir");
+            
+            // Construct the full path by combining project path with the database image path
+            // Remove leading slash if present in the database path
+            if (imagePath.startsWith("/")) {
+                imagePath = imagePath.substring(1);
+            }
+            
+            // Combine paths to get the full image path
+            String fullPath = projectPath + "/src/main/resources/" + imagePath;
+            
+            // Load the image from the constructed path
+            File imageFile = new File(fullPath);
+            if (imageFile.exists()) {
+                // If file exists, load and scale it
+                image = new ImageIcon(imageFile.getPath()).getImage();
+                image = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+            } else {
+                // If file doesn't exist, create placeholder
+                LOGGER.warning("Image file not found at: " + fullPath);
+                image = createPlaceholderImage();
+            }
+            
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load image: " + imagePath + ". Error: " + e.getMessage());
+            image = createPlaceholderImage();
+        }
+        
+        setPreferredSize(new Dimension(width, height));
+    }
+    
+    // The createPlaceholderImage and paintComponent methods remain the same
+    private Image createPlaceholderImage() {
+        BufferedImage placeholder = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = placeholder.createGraphics();
+        
+        g2d.setColor(new Color(245, 245, 245));
+        g2d.fillRect(0, 0, width, height);
+        
+        g2d.setColor(Color.GRAY);
+        g2d.drawRect(0, 0, width - 1, height - 1);
+        
+        g2d.setFont(new Font("Arial", Font.PLAIN, 12));
+        FontMetrics fm = g2d.getFontMetrics();
+        String text = "No Image";
+        int textX = (width - fm.stringWidth(text)) / 2;
+        int textY = (height + fm.getAscent()) / 2;
+        g2d.drawString(text, textX, textY);
+        
+        g2d.dispose();
+        return placeholder;
+    }
+    
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        if (image != null) {
+            int x = (getWidth() - width) / 2;
+            int y = (getHeight() - height) / 2;
+            g.drawImage(image, x, y, null);
+        }
+    }
+}

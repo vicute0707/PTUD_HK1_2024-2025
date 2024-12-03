@@ -1,0 +1,288 @@
+package dao;
+
+import entity.SanPham;
+import entity.DanhMuc;
+import connection.MyConnection;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+public class SanPhamDAO {
+	private static final Logger LOGGER = Logger.getLogger(SanPhamDAO.class.getName());
+	private MyConnection myConnection;
+
+	public SanPhamDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public ArrayList<SanPham> getAllSanPham() {
+		ArrayList<SanPham> dsSanPham = new ArrayList<>();
+		String sql = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				ORDER BY p.productID
+				""";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			while (rs.next()) {
+				SanPham sp = new SanPham();
+
+				// Set thông tin cơ bản
+				sp.setMaSP(rs.getString("productID"));
+				sp.setTenSP(rs.getString("name"));
+				sp.setSoLuongTonKho(rs.getInt("stockQuantity"));
+				sp.setThuongHieu(rs.getString("brand"));
+				sp.setHinhAnh(rs.getString("imagePath"));
+
+				// Xử lý tình trạng dựa vào số lượng tồn
+				int soLuong = rs.getInt("stockQuantity");
+				sp.setTinhTrang(getTinhTrangText(soLuong));
+
+				// Set danh mục
+				DanhMuc dm = new DanhMuc();
+				dm.setMaDM(rs.getString("category"));
+				dm.setTenDM(rs.getString("category_name"));
+				sp.setDanhmuc(dm);
+
+				dsSanPham.add(sp);
+			}
+			LOGGER.info("Đã lấy " + dsSanPham.size() + " sản phẩm từ database");
+			return dsSanPham;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi khi lấy danh sách sản phẩm: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	public boolean addSanPham(SanPham sp) {
+	    String sql = "INSERT INTO product (productID, name, category, brand, imagePath, stockQuantity, status) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+	    try (Connection conn = myConnection.connect();
+	         PreparedStatement pst = conn.prepareStatement(sql)) {
+
+	        pst.setString(1, sp.getMaSP());
+	        pst.setString(2, sp.getTenSP());
+	        pst.setString(3, sp.getDanhmuc().getMaDM());
+	        pst.setString(4, sp.getThuongHieu());
+	        pst.setString(5, sp.getHinhAnh());
+	        pst.setInt(6, sp.getSoLuongTonKho());
+	        pst.setString(7, sp.getTinhTrang());
+
+	        boolean result = pst.executeUpdate() > 0;
+	        LOGGER.info("Thêm sản phẩm " + (result ? "thành công" : "thất bại") + ": " + sp.getMaSP());
+	        return result;
+
+	    } catch (SQLException e) {
+	        LOGGER.severe("Lỗi thêm sản phẩm: " + e.getMessage());
+	        return false;
+	    }
+	}
+
+	public String getLastProductID() {
+	    String sql = "SELECT productID FROM product ORDER BY CAST(SUBSTRING(productID, 3) AS UNSIGNED) DESC LIMIT 1";
+	    
+	    try (Connection conn = myConnection.connect();
+	         PreparedStatement pst = conn.prepareStatement(sql);
+	         ResultSet rs = pst.executeQuery()) {
+	        
+	        if (rs.next()) {
+	            return rs.getString("productID");
+	        }
+	        return "SP000";
+	    } catch (SQLException e) {
+	        LOGGER.severe("Lỗi lấy mã sản phẩm cuối: " + e.getMessage());
+	        return "SP000";
+	    }
+	}
+
+	public boolean updateSanPham(SanPham sp) {
+		String sql = "CALL sp_UpdateProduct(?, ?, ?, ?, ?, ?, ?, ?)";
+
+		try (Connection conn = myConnection.connect(); CallableStatement cs = conn.prepareCall(sql)) {
+
+			cs.setString(1, sp.getMaSP());
+			cs.setString(2, sp.getTenSP());
+			cs.setString(3, sp.getDanhmuc().getMaDM());
+			cs.setString(6, sp.getThuongHieu());
+			cs.setString(7, sp.getHinhAnh());
+			cs.setString(8, "active");
+
+			boolean result = cs.executeUpdate() > 0;
+			LOGGER.info("Cập nhật sản phẩm " + (result ? "thành công" : "thất bại") + ": " + sp.getMaSP());
+			return result;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi cập nhật sản phẩm: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public boolean deleteSanPham(String maSP) {
+		String sql = "CALL sp_DeleteProduct(?)";
+
+		try (Connection conn = myConnection.connect(); CallableStatement cs = conn.prepareCall(sql)) {
+
+			cs.setString(1, maSP);
+			boolean result = cs.executeUpdate() > 0;
+			LOGGER.info("Xóa sản phẩm " + (result ? "thành công" : "thất bại") + ": " + maSP);
+			return result;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi xóa sản phẩm: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public SanPham getSanPhamByID(String productID) {
+		SanPham product = null;
+		try {
+			// Kết nối cơ sở dữ liệu và truy vấn sản phẩm dựa trên productID
+			Connection conn = myConnection.connect();
+			String sql = "SELECT p.*, c.name as category_name FROM product p "
+					+ "LEFT JOIN category c ON p.category = c.categoryID " + "WHERE p.productID = ?";
+			PreparedStatement stmt = conn.prepareStatement(sql);
+			stmt.setString(1, productID);
+			ResultSet rs = stmt.executeQuery();
+
+			if (rs.next()) {
+				product = new SanPham();
+				product.setMaSP(rs.getString("productID"));
+				product.setTenSP(rs.getString("name"));
+				// Lấy thông tin danh mục
+				String categoryID = rs.getString("category");
+				DanhMuc danhMuc = new DanhMuc();
+				danhMuc.setMaDM(categoryID);
+				danhMuc.setTenDM(rs.getString("category_name"));
+				product.setDanhmuc(danhMuc);
+				product.setSoLuongTonKho(rs.getInt("stockQuantity"));
+				product.setThuongHieu(rs.getString("brand"));
+				product.setTinhTrang(rs.getString("status"));
+				product.setHinhAnh(rs.getString("imagePath"));
+			}
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi khi lấy thông tin sản phẩm: " + e.getMessage());
+		} finally {
+			myConnection.closeConnection();
+		}
+		return product;
+	}
+
+	// Tìm kiếm theo các tiêu chí
+	public ArrayList<SanPham> timKiemSanPham(String tuKhoa, String loaiTim) {
+		ArrayList<SanPham> ketQua = new ArrayList<>();
+		String sql = buildSearchQuery(loaiTim);
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, "%" + tuKhoa + "%");
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				SanPham sp = createSanPhamFromResultSet(rs);
+				ketQua.add(sp);
+			}
+			LOGGER.info("Tìm thấy " + ketQua.size() + " sản phẩm với từ khóa: " + tuKhoa);
+			return ketQua;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi tìm kiếm sản phẩm: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	private String buildSearchQuery(String loaiTim) {
+		String baseQuery = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				WHERE p.status = 'active' AND
+				""";
+
+		return baseQuery + switch (loaiTim) {
+		case "Theo Mã" -> "p.productID LIKE ?";
+		case "Tên SP" -> "p.name LIKE ?";
+		case "Tên DM" -> "c.name LIKE ?";
+		case "Thương Hiệu" -> "p.brand LIKE ?";
+		default -> "p.name LIKE ?";
+		};
+	}
+
+	private SanPham createSanPhamFromResultSet(ResultSet rs) throws SQLException {
+		SanPham sp = new SanPham();
+		sp.setMaSP(rs.getString("productID"));
+		sp.setTenSP(rs.getString("name"));
+		sp.setSoLuongTonKho(rs.getInt("stockQuantity"));
+		sp.setThuongHieu(rs.getString("brand"));
+		sp.setHinhAnh(rs.getString("imagePath"));
+
+		DanhMuc dm = new DanhMuc();
+		dm.setMaDM(rs.getString("category"));
+		dm.setTenDM(rs.getString("category_name"));
+		sp.setDanhmuc(dm);
+
+		sp.setTinhTrang(getTinhTrangText(rs.getInt("stockQuantity")));
+
+		return sp;
+	}
+
+	private String getTinhTrangText(int soLuong) {
+		if (soLuong <= 0)
+			return "Hết hàng";
+		if (soLuong <= 10)
+			return "Sắp hết";
+		return "Còn hàng";
+	}
+
+	public String getLastProductId() {
+		String sql = "SELECT productID FROM product ORDER BY productID DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			if (rs.next()) {
+				return rs.getString("productID");
+			}
+			return "PRD000";
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi lấy mã sản phẩm cuối cùng: " + e.getMessage());
+			return "PRD000";
+		}
+	}
+
+	public List<SanPham> getSanPhamByDanhMuc(String maDM) {
+		List<SanPham> danhSachSP = new ArrayList<>();
+		String sql = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				WHERE p.category = ? AND p.status = 'active'
+				""";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, maDM);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				SanPham sp = createSanPhamFromResultSet(rs);
+				danhSachSP.add(sp);
+			}
+
+			LOGGER.info("Đã lấy " + danhSachSP.size() + " sản phẩm của danh mục " + maDM);
+			return danhSachSP;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi lấy sản phẩm theo danh mục: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+}

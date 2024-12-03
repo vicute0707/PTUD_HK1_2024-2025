@@ -1,0 +1,139 @@
+package dao;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import connection.MyConnection;
+import entity.DashboardStats;
+
+public class DashboardDAO {
+    private Connection con;
+    
+    public DashboardDAO() {
+        con = DatabaseHelper.getConnection();
+    }
+    
+    public DashboardStats getDashboardStats() {
+        int totalActiveStaff = 0;
+        int totalProducts = 0;
+        int totalSuppliers = 0;
+        double monthlyRevenue = 0.0;
+        
+        try {
+            // Get total active staff
+            String staffQuery = "SELECT COUNT(*) FROM user WHERE status = 'active'";
+            PreparedStatement staffStmt = con.prepareStatement(staffQuery);
+            ResultSet staffRs = staffStmt.executeQuery();
+            if (staffRs.next()) {
+                totalActiveStaff = staffRs.getInt(1);
+            }
+            
+            // Get total products in stock (sum of all variant quantities)
+            String productQuery = "SELECT SUM(quantity) FROM productvariant";
+            PreparedStatement productStmt = con.prepareStatement(productQuery);
+            ResultSet productRs = productStmt.executeQuery();
+            if (productRs.next()) {
+                totalProducts = productRs.getInt(1);
+            }
+            
+            // Get total suppliers
+            String supplierQuery = "SELECT COUNT(*) FROM supplier";
+            PreparedStatement supplierStmt = con.prepareStatement(supplierQuery);
+            ResultSet supplierRs = supplierStmt.executeQuery();
+            if (supplierRs.next()) {
+                totalSuppliers = supplierRs.getInt(1);
+            }
+            
+            // Get monthly revenue
+            String revenueQuery = "SELECT SUM(totalAmount) FROM `order` " +
+                                "WHERE MONTH(orderDate) = MONTH(CURRENT_DATE()) " +
+                                "AND YEAR(orderDate) = YEAR(CURRENT_DATE())";
+            PreparedStatement revenueStmt = con.prepareStatement(revenueQuery);
+            ResultSet revenueRs = revenueStmt.executeQuery();
+            if (revenueRs.next()) {
+                monthlyRevenue = revenueRs.getDouble(1);
+            }
+            
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return new DashboardStats(totalActiveStaff, totalProducts, totalSuppliers, monthlyRevenue);
+    }
+
+    // Method to get recent activities
+    public List<RecentActivity> getRecentActivities() {
+        List<RecentActivity> activities = new ArrayList<>();
+        
+        try {
+            // Get recent orders
+            String orderQuery = """
+                SELECT 'Đơn hàng mới' as type, 
+                       CONCAT('ĐH', orderID) as id,
+                       u.fullName as staffName,
+                       orderDate as activityDate,
+                       totalAmount
+                FROM `order` o
+                JOIN user u ON o.staff = u.userID
+                ORDER BY orderDate DESC
+                LIMIT 5
+            """;
+            
+            // Get recent imports
+            String importQuery = """
+                SELECT 'Nhập kho' as type,
+                       CONCAT('NK', i.importID) as id,
+                       u.fullName as staffName,
+                       s.name as supplierName,
+                       i.importDate as activityDate,
+                       i.totalAmount
+                FROM import i
+                JOIN user u ON i.staff = u.userID
+                JOIN supplier s ON i.supplier = s.supplierID
+                ORDER BY importDate DESC
+                LIMIT 5
+            """;
+            
+            // Execute queries and populate activities list
+            try (PreparedStatement orderStmt = con.prepareStatement(orderQuery);
+                 PreparedStatement importStmt = con.prepareStatement(importQuery)) {
+                
+                // Process orders
+                ResultSet orderRs = orderStmt.executeQuery();
+                while (orderRs.next()) {
+                    activities.add(new RecentActivity(
+                        orderRs.getString("type"),
+                        orderRs.getString("id"),
+                        "Nhân viên: " + orderRs.getString("staffName"),
+                        orderRs.getTimestamp("activityDate"),
+                        "/icon/shopping-cart.png"
+                    ));
+                }
+                
+                // Process imports
+                ResultSet importRs = importStmt.executeQuery();
+                while (importRs.next()) {
+                    activities.add(new RecentActivity(
+                        importRs.getString("type"),
+                        importRs.getString("id"),
+                        String.format("NCC: %s - NV: %s",
+                            importRs.getString("supplierName"),
+                            importRs.getString("staffName")),
+                        importRs.getTimestamp("activityDate"),
+                        "/icon/box.png"
+                    ));
+                }
+            }
+            
+            // Sort activities by date
+            activities.sort((a1, a2) -> a2.getActivityDate().compareTo(a1.getActivityDate()));
+            
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return activities;
+    }
+}

@@ -1,0 +1,234 @@
+package bus;
+
+import dao.DanhMucDAO;
+import entity.DanhMuc;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
+
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
+public class DanhMucBUS {
+	private static final Logger LOGGER = Logger.getLogger(DanhMucBUS.class.getName());
+	private static final int MAX_NAME_LENGTH = 100;
+	private static final int MAX_NOTE_LENGTH = 255;
+	// Regex for category ID validation
+	private static final Pattern CATEGORY_ID_PATTERN = Pattern.compile("CAT\\d{3}");
+
+	private final DanhMucDAO danhMucDAO;
+	private List<DanhMuc> danhSachDanhMuc;
+	private final Object lock = new Object(); // For thread safety
+
+	public DanhMucBUS() {
+		danhMucDAO = new DanhMucDAO();
+		danhSachDanhMuc = new ArrayList<>();
+		loadDanhMuc();
+	}
+
+	public void loadDanhMuc() {
+		synchronized (lock) {
+			danhSachDanhMuc = danhMucDAO.getAllDanhMuc();
+		}
+	}
+
+	private String validateDanhMuc(String tenDM, String ghiChu) {
+		if (tenDM == null || tenDM.trim().isEmpty()) {
+			return "Tên danh mục không được để trống";
+		}
+
+		if (tenDM.length() > MAX_NAME_LENGTH) {
+			return "Tên danh mục không được vượt quá " + MAX_NAME_LENGTH + " ký tự";
+		}
+
+		if (ghiChu != null && ghiChu.length() > MAX_NOTE_LENGTH) {
+			return "Ghi chú không được vượt quá " + MAX_NOTE_LENGTH + " ký tự";
+		}
+
+		// Check for special characters in category name
+		if (!tenDM.matches("[\\p{L}\\p{N}\\s_-]+")) {
+			return "Tên danh mục chỉ được chứa chữ cái, số và dấu gạch ngang";
+		}
+
+		return null; // Validation passed
+	}
+
+	public void hienThiDanhMuc(DefaultTableModel tableModel) {
+		tableModel.setRowCount(0);
+		for (DanhMuc dm : danhSachDanhMuc) {
+			Object[] row = { dm.getMaDM(), dm.getTenDM(), dm.getGhiChu() };
+			tableModel.addRow(row);
+		}
+	}
+
+	public boolean themDanhMuc(String tenDM, String ghiChu) {
+		try {
+			// Validate input again at BUS layer
+			if (tenDM == null || tenDM.trim().isEmpty()) {
+				return false;
+			}
+
+			// Check for existing category
+			if (danhMucDAO.isTenDanhMucExists(tenDM)) {
+				return false;
+			}
+
+			DanhMuc danhMuc = new DanhMuc();
+			danhMuc.setTenDM(tenDM.trim());
+			danhMuc.setGhiChu(ghiChu != null ? ghiChu.trim() : "");
+			danhMuc.setMaDM(generateNewCategoryId());
+
+			return danhMucDAO.addDanhMuc(danhMuc);
+		} catch (Exception e) {
+			LOGGER.severe("Error in themDanhMuc: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public boolean suaDanhMuc(String maDM, String tenDM, String ghiChu) {
+		try {
+			// Validate input
+			String validationError = validateDanhMuc(tenDM, ghiChu);
+			if (validationError != null) {
+				JOptionPane.showMessageDialog(null, validationError, "Lỗi", JOptionPane.ERROR_MESSAGE);
+				return false;
+			}
+
+			synchronized (lock) {
+				// Check if category exists
+				DanhMuc existing = danhMucDAO.getDanhMucById(maDM);
+				if (existing == null) {
+					JOptionPane.showMessageDialog(null, "Không tìm thấy danh mục!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+					return false;
+				}
+
+				// Check for name conflicts (excluding current category)
+				if (danhSachDanhMuc.stream()
+						.anyMatch(dm -> !dm.getMaDM().equals(maDM) && dm.getTenDM().equalsIgnoreCase(tenDM.trim()))) {
+					JOptionPane.showMessageDialog(null, "Tên danh mục đã tồn tại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+					return false;
+				}
+
+				// Update category
+				DanhMuc updatedDanhMuc = new DanhMuc(maDM, tenDM.trim(), ghiChu != null ? ghiChu.trim() : "");
+
+				// Database transaction
+				boolean success = danhMucDAO.updateDanhMuc(updatedDanhMuc);
+				if (success) {
+					// Update local cache
+					for (int i = 0; i < danhSachDanhMuc.size(); i++) {
+						if (danhSachDanhMuc.get(i).getMaDM().equals(maDM)) {
+							danhSachDanhMuc.set(i, updatedDanhMuc);
+							break;
+						}
+					}
+					LOGGER.info("Cập nhật danh mục thành công: " + maDM);
+					return true;
+				}
+
+				return false;
+			}
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi cập nhật danh mục: " + e.getMessage());
+			JOptionPane.showMessageDialog(null, "Có lỗi xảy ra khi cập nhật danh mục. Vui lòng thử lại sau.", "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			return false;
+		}
+	}
+
+	public boolean xoaDanhMuc(String maDM) {
+		try {
+			synchronized (lock) {
+				// Validate category ID
+				if (!CATEGORY_ID_PATTERN.matcher(maDM).matches()) {
+					LOGGER.warning("Invalid category ID format: " + maDM);
+					return false;
+				}
+
+				// Check for dependencies
+				if (danhMucDAO.isDanhMucInUse(maDM)) {
+					JOptionPane.showMessageDialog(null,
+							"Không thể xóa danh mục này vì đang có sản phẩm thuộc danh mục!\n"
+									+ "Vui lòng chuyển hoặc xóa các sản phẩm trước khi xóa danh mục.",
+							"Cảnh báo", JOptionPane.WARNING_MESSAGE);
+					return false;
+				}
+
+				// Get confirmation
+				int confirm = JOptionPane.showConfirmDialog(null,
+						"Bạn có chắc chắn muốn xóa danh mục này?\n" + "Hành động này không thể hoàn tác!",
+						"Xác nhận xóa", JOptionPane.YES_NO_OPTION);
+
+				if (confirm != JOptionPane.YES_OPTION) {
+					return false;
+				}
+
+				// Database transaction
+				boolean success = danhMucDAO.deleteDanhMuc(maDM);
+				if (success) {
+					// Update local cache
+					danhSachDanhMuc.removeIf(dm -> dm.getMaDM().equals(maDM));
+					LOGGER.info("Xóa danh mục thành công: " + maDM);
+					return true;
+				}
+
+				return false;
+			}
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi xóa danh mục: " + e.getMessage());
+			JOptionPane.showMessageDialog(null, "Có lỗi xảy ra khi xóa danh mục. Vui lòng thử lại sau.", "Lỗi",
+					JOptionPane.ERROR_MESSAGE);
+			return false;
+		}
+	}
+
+	public List<DanhMuc> timKiemDanhMuc(String keyword) {
+		try {
+			if (keyword == null || keyword.trim().isEmpty()) {
+				return new ArrayList<>(danhSachDanhMuc);
+			}
+
+			List<DanhMuc> ketQua = danhMucDAO.searchDanhMuc(keyword);
+			LOGGER.info("Tìm thấy " + ketQua.size() + " danh mục với từ khóa: " + keyword);
+			return ketQua;
+
+		} catch (Exception e) {
+			LOGGER.severe("Lỗi tìm kiếm danh mục: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	public void refreshData() {
+		loadDanhMuc();
+	}
+
+	public String generateNewCategoryId() {
+		synchronized (lock) {
+			String lastId = danhMucDAO.getLastDanhMucID();
+			if (lastId == null) {
+				return "CAT001";
+			}
+
+			try {
+				int number = Integer.parseInt(lastId.substring(3)) + 1;
+				return String.format("CAT%03d", number);
+			} catch (NumberFormatException e) {
+				LOGGER.severe("Error parsing category ID: " + lastId);
+				throw new RuntimeException("Invalid category ID format");
+			}
+		}
+	}
+
+	public List<DanhMuc> getDanhSachDanhMuc() {
+		return danhSachDanhMuc;
+	}
+
+	public DanhMuc getDanhMucById(String maDM) {
+		return danhMucDAO.getDanhMucById(maDM);
+	}
+
+	public DanhMuc getDanhMucByName(String tenDM) {
+		return danhMucDAO.getDanhMucByName(tenDM);
+	}
+}

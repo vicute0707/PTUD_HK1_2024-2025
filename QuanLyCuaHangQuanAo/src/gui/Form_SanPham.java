@@ -44,6 +44,7 @@ import dialog.ThemSanPham;
 import entity.SanPham;
 import entity.UserSession;
 import service.PermissionChecker;
+import style.CreateRoundedButton;
 import style.CustomScrollBarUI;
 
 public class Form_SanPham extends JPanel {
@@ -55,6 +56,7 @@ public class Form_SanPham extends JPanel {
 	private static final Font CONTENT_FONT = new Font(FlatRobotoFont.FAMILY, Font.PLAIN, 12);
 	private int selectedRow = -1; // Thêm biến để lưu hàng được chọn
 	private JTable table;
+	int soLuongTonKho = -1;
 	private DefaultTableModel tableModel;
 	private JTextField searchField;
 	SanPhamBUS sanPhamBUS;
@@ -85,8 +87,7 @@ public class Form_SanPham extends JPanel {
 		tablePanel.setBorder(new EmptyBorder(10, 0, 0, 0));
 
 		// Khởi tạo columns
-		String[] columns = { "Mã SP", "Tên sản phẩm", "Danh mục", "Số lượng tồn", "Giá nhập", "Giá bán", "Thương hiệu",
-				"Tình trạng" };
+		String[] columns = { "Mã SP", "Tên sản phẩm", "Danh mục", "Số lượng tồn", "Thương hiệu", "Tình trạng" };
 
 		// Khởi tạo tableModel
 		this.tableModel = new DefaultTableModel(columns, 0) {
@@ -148,7 +149,7 @@ public class Form_SanPham extends JPanel {
 	}
 
 	private void setupStatusColumnRenderer() {
-		table.getColumnModel().getColumn(7).setCellRenderer((table, value, isSelected, hasFocus, row, column) -> {
+		table.getColumnModel().getColumn(5).setCellRenderer((table, value, isSelected, hasFocus, row, column) -> {
 			JLabel label = new JLabel(value.toString());
 			label.setOpaque(true);
 			label.setHorizontalAlignment(JLabel.CENTER);
@@ -156,15 +157,14 @@ public class Form_SanPham extends JPanel {
 			label.setBorder(new EmptyBorder(0, 5, 0, 5));
 
 			switch (value.toString()) {
-			case "Còn hàng":
+			case "Đang kinh doanh":
 				label.setForeground(new Color(0, 128, 0));
 				break;
-			case "Sắp hết":
+			case "Chưa nhập về":
 				label.setForeground(new Color(255, 140, 0));
 				break;
-			case "Hết hàng":
-				label.setForeground(Color.RED);
-				break;
+			case "Ngừng kinh doanh":
+				label.setForeground(Color.darkGray);
 			}
 
 			if (isSelected) {
@@ -187,14 +187,10 @@ public class Form_SanPham extends JPanel {
 			java.util.List<SanPham> dsSanPham = sanPhamBUS.getAllSanPham();
 
 			// Format the data and add it to the table model
-			NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
 			for (SanPham sp : dsSanPham) {
-				String giaNhap = currencyFormat.format(sp.getGiaNhap());
-				String giaBan = currencyFormat.format(sp.getGiaBan());
-				String tinhTrang = getTinhTrangText(sp.getSoLuongTonKho());
 
 				Object[] row = { sp.getMaSP(), sp.getTenSP(), sp.getDanhmuc().getTenDM(), sp.getSoLuongTonKho(),
-						giaNhap, giaBan, sp.getThuongHieu(), tinhTrang };
+						sp.getThuongHieu(), sp.getTinhTrang() };
 				tableModel.addRow(row);
 			}
 		} catch (Exception e) {
@@ -203,14 +199,10 @@ public class Form_SanPham extends JPanel {
 		}
 	}
 
-	private String getTinhTrangText(int soLuongTonKho) {
-		if (soLuongTonKho <= 0) {
-			return "Hết hàng";
-		} else if (soLuongTonKho <= 10) {
-			return "Sắp hết";
-		} else {
-			return "Còn hàng";
-		}
+	public void refreshTable() {
+		loadDataFromDB();
+		table.repaint();
+		table.revalidate();
 	}
 
 	public JTable getTable() {
@@ -227,12 +219,9 @@ public class Form_SanPham extends JPanel {
 			tableModel.setRowCount(0);
 
 			for (SanPham sp : danhSachSP) {
-				NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
-				String giaNhap = currencyFormat.format(sp.getGiaNhap());
-				String giaBan = currencyFormat.format(sp.getGiaBan());
 
 				Object[] row = { sp.getMaSP(), sp.getTenSP(), sp.getDanhmuc().getTenDM(), sp.getSoLuongTonKho(),
-						giaNhap, giaBan, sp.getThuongHieu(), getTinhTrangText(sp.getSoLuongTonKho()) };
+						sp.getThuongHieu(), sp.getTinhTrang() };
 				tableModel.addRow(row);
 			}
 		} catch (Exception e) {
@@ -277,24 +266,25 @@ public class Form_SanPham extends JPanel {
 			}
 
 		});
+		CreateRoundedButton createRoundedButton = new CreateRoundedButton();
 
 		// Search field setup
 		searchField = new JTextField();
 		searchField.setPreferredSize(new Dimension(220, 35));
 		searchField.setFont(CONTENT_FONT);
 
-		// Create and configure search button
-		JButton searchButton = createRoundedButton("", "/icon/search.png", false);
+		JButton searchButton = createRoundedButton.createRoundedButton("", "/icon/search.png", false);
 		configureButtonWithPermission(searchButton, currentUserId, PermissionChecker.PERM_PRODUCT_MANAGEMENT, () -> {
 			String keyword = searchField.getText().trim();
+			String searchType = filterCombo.getSelectedItem().toString();
 
 			if (keyword.isEmpty()) {
 				JOptionPane.showMessageDialog(this, "Vui lòng nhập từ khóa tìm kiếm!", "Thông báo",
 						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
-			// Implement search logic here
 
+			performSearch(searchType, keyword);
 		});
 
 		// Add components to search panel
@@ -307,7 +297,7 @@ public class Form_SanPham extends JPanel {
 		actionPanel.setBackground(Color.WHITE);
 
 		// Add Product Button
-		JButton addButton = createRoundedButton("Thêm sản phẩm", "/icon/circle-plus.png", true);
+		JButton addButton = createRoundedButton.createRoundedButton("Thêm sản phẩm", "/icon/circle-plus.png", true);
 		addButton.setBackground(PRIMARY_COLOR);
 		addButton.setForeground(Color.WHITE);
 		addButton.setPreferredSize(new Dimension(160, 38));
@@ -319,26 +309,33 @@ public class Form_SanPham extends JPanel {
 			}
 		});
 
-		// Edit Button
-		JButton editButton = createRoundedButton("Edit", "/icon/pencil.png", true);
+		JButton editButton = createRoundedButton.createRoundedButton("Edit", "/icon/pencil.png", true);
+
+		// Add selection listener to table to update edit button state
+		table.getSelectionModel().addListSelectionListener(e -> {
+			if (!e.getValueIsAdjusting()) {
+				updateEditButtonState(editButton);
+			}
+		});
+
 		configureButtonWithPermission(editButton, currentUserId, PermissionChecker.PERM_PRODUCT_MANAGEMENT, () -> {
 			handleEditProduct();
 		});
 
 		// Delete Button
-		JButton deleteButton = createRoundedButton("Xóa", "/icon/trash.png", true);
+		JButton deleteButton = createRoundedButton.createRoundedButton("Xóa", "/icon/trash.png", true);
 		configureButtonWithPermission(deleteButton, currentUserId, PermissionChecker.PERM_PRODUCT_MANAGEMENT, () -> {
 			handleDeleteProduct();
 		});
 
 		// Info Button
-		JButton infoButton = createRoundedButton("About", "/icon/info.png", true);
+		JButton infoButton = createRoundedButton.createRoundedButton("About", "/icon/info.png", true);
 		configureButtonWithPermission(infoButton, currentUserId, PermissionChecker.PERM_PRODUCT_MANAGEMENT, () -> {
 			handleProductInfo();
 		});
 
 		// Export Button
-		JButton exportButton = createRoundedButton("Xuất Excel", "/icon/printer.png", true);
+		JButton exportButton = createRoundedButton.createRoundedButton("Xuất Excel", "/icon/printer.png", true);
 		exportButton.setPreferredSize(new Dimension(160, 38));
 		configureButtonWithPermission(exportButton, currentUserId, PermissionChecker.PERM_REPORT, () -> {
 			handleExportToExcel();
@@ -358,11 +355,61 @@ public class Form_SanPham extends JPanel {
 		return panel;
 	}
 
+	private void performSearch(String searchType, String keyword) {
+		tableModel.setRowCount(0); // Clear current table data
+		ArrayList<SanPham> dsSanPham = sanPhamBUS.getAllSanPham();
+		ArrayList<SanPham> searchResults = new ArrayList<>();
+
+		// Perform search based on selected criteria
+		for (SanPham sp : dsSanPham) {
+			boolean matches = false;
+			switch (searchType) {
+			case "Theo Mã":
+				matches = sp.getMaSP().toLowerCase().contains(keyword.toLowerCase());
+				break;
+			case "Tên SP":
+				matches = sp.getTenSP().toLowerCase().contains(keyword.toLowerCase());
+				break;
+			case "Tên DM":
+				matches = sp.getDanhmuc().getTenDM().toLowerCase().contains(keyword.toLowerCase());
+				break;
+			case "Thương Hiệu":
+				matches = sp.getThuongHieu().toLowerCase().contains(keyword.toLowerCase());
+				break;
+			}
+
+			if (matches) {
+				searchResults.add(sp);
+			}
+		}
+
+		// Update table with search results
+		for (SanPham sp : searchResults) {
+			Object[] row = { sp.getMaSP(), sp.getTenSP(), sp.getDanhmuc().getTenDM(), sp.getSoLuongTonKho(),
+					sp.getThuongHieu(), sp.getTinhTrang() };
+			tableModel.addRow(row);
+		}
+
+		// Show message if no results found
+		if (searchResults.isEmpty()) {
+			JOptionPane.showMessageDialog(this, "Không tìm thấy sản phẩm nào phù hợp với từ khóa: " + keyword,
+					"Thông báo", JOptionPane.INFORMATION_MESSAGE);
+			loadDataFromDB(); // Reset to show all products
+		}
+	}
+
 	// Helper methods for button actions
 	private void handleAddProduct(ThemSanPham dialog) {
-		Object[] rowData = { "PRD" + (tableModel.getRowCount() + 1), dialog.getTenSP(), dialog.getDanhMuc(),
-				dialog.getTonKho(), dialog.getGiaNhap(), dialog.getGiaBan(), dialog.getThuongHieu(), "Còn hàng" };
-		tableModel.addRow(rowData);
+		if (dialog.isConfirmed()) {
+			SanPham sp = dialog.getSanPham();
+			Object[] rowData = { sp.getMaSP(), sp.getTenSP(), sp.getDanhmuc().getTenDM(), sp.getSoLuongTonKho(),
+					sp.getThuongHieu(), sp.getTinhTrang() };
+			tableModel.addRow(rowData);
+			loadDataFromDB(); // Refresh table data
+
+			refreshTable();
+
+		}
 	}
 
 	private void handleEditProduct() {
@@ -372,8 +419,35 @@ public class Form_SanPham extends JPanel {
 					JOptionPane.WARNING_MESSAGE);
 			return;
 		}
+
+		// Get the product status from the selected row (column index 5 is status)
+		String productStatus = table.getValueAt(selectedRow, 5).toString();
+
+		// Check if the product is discontinued
+		if ("Ngừng kinh doanh".equals(productStatus)) {
+			JOptionPane.showMessageDialog(this, "Không thể chỉnh sửa sản phẩm đã ngừng kinh doanh.", "Thông báo",
+					JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		// If product is not discontinued, proceed with editing
 		EditSanPham dialog = new EditSanPham((Frame) SwingUtilities.getWindowAncestor(this), tableModel, selectedRow);
 		dialog.setVisible(true);
+
+		// If changes were confirmed, refresh the table
+		if (dialog.isConfirmed()) {
+			refreshTable();
+		}
+	}
+
+	private void updateEditButtonState(JButton editButton) {
+		int selectedRow = table.getSelectedRow();
+		if (selectedRow != -1) {
+			String status = table.getValueAt(selectedRow, 5).toString();
+			editButton.setEnabled(!"Ngừng kinh doanh".equals(status));
+		} else {
+			editButton.setEnabled(false);
+		}
 	}
 
 	private void handleDeleteProduct() {
@@ -387,14 +461,14 @@ public class Form_SanPham extends JPanel {
 	}
 
 	private void handleProductInfo() {
-		String maSP = table.getValueAt(selectedRow, 1).toString();
 		selectedRow = table.getSelectedRow();
 		if (selectedRow == -1) {
 			JOptionPane.showMessageDialog(this, "Vui lòng chọn một sản phẩm để xem chi tiết.", "Thông báo",
 					JOptionPane.WARNING_MESSAGE);
 			return;
 		}
-		ChiTietSanPham dialog = new ChiTietSanPham((Frame) SwingUtilities.getWindowAncestor(this), maSP);
+		ChiTietSanPham dialog = new ChiTietSanPham((Frame) SwingUtilities.getWindowAncestor(this), tableModel,
+				selectedRow);
 		dialog.setVisible(true);
 	}
 
@@ -419,16 +493,11 @@ public class Form_SanPham extends JPanel {
 				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 
 		if (confirm == JOptionPane.YES_OPTION) {
+			sanPhamBUS.deleteSanPham(maSP);
 			tableModel.removeRow(selectedRow);
-			updateTable();
-		}
-	}
 
-	private void updateTable() {
-		// Update STT column and any other necessary updates
-		for (int i = 0; i < tableModel.getRowCount(); i++) {
-			tableModel.setValueAt(i + 1, i, 0);
 		}
+		refreshTable();
 	}
 
 	private void configureButtonWithPermission(JButton button, String userId, String permission, Runnable action) {
@@ -495,43 +564,6 @@ public class Form_SanPham extends JPanel {
 		}
 	}
 
-	private JButton createRoundedButton(String text, String iconPath, boolean isRounded) {
-		JButton button = new JButton(text);
-		button.setFont(CONTENT_FONT);
-		if (iconPath != null && !iconPath.isEmpty()) {
-			button.setIcon(new ImageIcon(getClass().getResource(iconPath)));
-		}
-
-		if (isRounded) {
-			button.setBorder(new LineBorder(new Color(230, 230, 230), 1, true));
-		} else {
-			button.setBorder(BorderFactory.createEmptyBorder());
-		}
-
-		button.setFocusPainted(false);
-		button.setBackground(Color.WHITE);
-		button.setPreferredSize(new Dimension(text.isEmpty() ? 38 : 130, 38));
-
-		// Add hover effect
-		button.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				button.setBackground(HOVER_COLOR);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				if (button.getForeground().equals(Color.WHITE)) {
-					button.setBackground(PRIMARY_COLOR);
-				} else {
-					button.setBackground(Color.WHITE);
-				}
-			}
-		});
-
-		return button;
-	}
-
 	// phương thức xuất file Excel
 	public void exportToHTMLWithFont(JTable table, String filePath) {
 		try (FileWriter htmlWriter = new FileWriter(filePath)) {
@@ -556,7 +588,6 @@ public class Form_SanPham extends JPanel {
 				htmlWriter.write("<th>" + model.getColumnName(col) + "</th>");
 			}
 			htmlWriter.write("</tr>\n");
-
 			// Ghi dữ liệu từng hàng
 			for (int row = 0; row < model.getRowCount(); row++) {
 				htmlWriter.write("<tr>\n");

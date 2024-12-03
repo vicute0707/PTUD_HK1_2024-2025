@@ -3,15 +3,20 @@
 	<item key="hasShownOverlayPopupBefore" value="true"/>
 	<item key="replaceBarOpen" value="false"/>
 	<list key="searchhistory">
-		<item value="loadIn"/>
-		<item value="performSearch"/>
-		<item value="setupPermissions"/>
-		<item value="loadData"/>
-		<item value="ActionListener"/>
-		<item value="handleExport"/>
-		<item value="roleComboBox"/>
-		<item value="cboRole"/>
-		<item value="loadRoles"/>
-		<item value="refreshTable"/>
+		<item value="display"/>
+		<item value="handleEditProduct"/>
+		<item value="editH"/>
+		<item value="edit"/>
+		<item value="configureButtonWithPermission"/>
+		<item value="top"/>
+		<item value="loadDataFromDB"/>
+		<item value="createTablePanel"/>
+		<item value="maSP"/>
+		<item value="addHan"/>
+		<item value="add"/>
+		<item value="handleAddProduct"/>
+		<item value="addHa"/>
+		<item value="setupStatusColumnRenderer"/>
+		<item value="table"/>
 	</list>
 </section>

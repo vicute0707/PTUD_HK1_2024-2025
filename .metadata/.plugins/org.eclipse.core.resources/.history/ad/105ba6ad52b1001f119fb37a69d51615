@@ -1,0 +1,170 @@
+package bus;
+
+import dao.ImportDAO;
+import dao.ImportDetailDAO;
+import dao.ProductVariantDAO;
+import dao.UserDAO;
+import entity.Import;
+import entity.ImportDetail;
+import entity.ProductVariant;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.logging.Logger;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+public class ImportBUS {
+	private static final Logger LOGGER = Logger.getLogger(ImportBUS.class.getName());
+	private ImportDAO importDAO;
+	private ProductVariantDAO variantDAO;
+	private ImportDetailDAO importDetailDAO;
+	private UserDAO userDAO;
+	public ImportBUS() {
+		userDAO = new UserDAO();
+		importDAO = new ImportDAO();
+		variantDAO = new ProductVariantDAO();
+		importDetailDAO = new ImportDetailDAO();
+	}
+
+	/**
+	 * Create a new import order with validation
+	 */
+	public boolean createImport(Import importOrder) throws Exception {
+		validateImportOrder(importOrder);
+
+		// Generate new import ID if not provided
+		if (importOrder.getImportID() == null || importOrder.getImportID().trim().isEmpty()) {
+			importOrder.setImportID(importDAO.generateNewImportID());
+		}
+
+		// Set import date if not provided
+		if (importOrder.getImportDate() == null) {
+			importOrder.setImportDate(new Date());
+		}
+
+		// Update product variants and validate availability
+		for (ImportDetail detail : importOrder.getImportDetails()) {
+			ProductVariant variant = variantDAO.getVariantByID(detail.getVariantID());
+			if (variant == null) {
+				throw new Exception("Phân loại sản phẩm không tồn tại: " + detail.getVariantID());
+			}
+		}
+
+		// Create JSON details
+		String detailsJson = generateDetailsJson(importOrder.getImportDetails());
+		importOrder.setDetails(detailsJson);
+
+		return importDAO.addImport(importOrder);
+	}
+	private String generateDetailsJson(List<ImportDetail> details) {
+        JSONArray detailsArray = new JSONArray();
+        
+        for (ImportDetail detail : details) {
+            JSONObject detailObj = new JSONObject();
+            detailObj.put("variantID", detail.getVariantID());
+            detailObj.put("quantity", detail.getQuantity());
+            detailObj.put("price", detail.getPrice());
+            detailsArray.put(detailObj);
+        }
+        
+        return detailsArray.toString();
+    }
+
+	/**
+	 * Get all imports
+	 */
+	public List<Import> getAllImports() {
+		return importDAO.getAllImports();
+	}
+
+	/**
+	 * Get import by ID
+	 */
+	public Import getImportById(String importId) throws Exception {
+		if (importId == null || importId.trim().isEmpty()) {
+			throw new Exception("Mã đơn nhập không được để trống");
+		}
+		return importDAO.getImportById(importId);
+	}
+
+	/**
+	 * Calculate total amount for import details
+	 */
+	public double calculateTotalAmount(List<ImportDetail> details) {
+		return details.stream().mapToDouble(detail -> detail.getPrice() * detail.getQuantity()).sum();
+	}
+
+	/**
+	 * Validate import order data
+	 */
+	private void validateImportOrder(Import importOrder) throws Exception {
+		if (importOrder == null) {
+			throw new Exception("Đơn nhập không được null");
+		}
+
+		// Validate supplier
+		if (importOrder.getSupplier() == null || importOrder.getSupplier().trim().isEmpty()) {
+			throw new Exception("Nhà cung cấp không được để trống");
+		}
+
+		// Validate staff
+		if (importOrder.getStaff() == null || importOrder.getStaff().trim().isEmpty()) {
+			throw new Exception("Nhân viên không được để trống");
+		}
+
+		// Validate import details
+		if (importOrder.getImportDetails() == null || importOrder.getImportDetails().isEmpty()) {
+			throw new Exception("Đơn nhập phải có ít nhất một sản phẩm");
+		}
+
+		// Validate each import detail
+		for (ImportDetail detail : importOrder.getImportDetails()) {
+			if (detail.getPrice() <= 0) {
+				throw new Exception("Giá nhập phải lớn hơn 0");
+			}
+			if (detail.getQuantity() <= 0) {
+				throw new Exception("Số lượng phải lớn hơn 0");
+			}
+		}
+
+		// Validate total amount
+		if (importOrder.getTotalAmount() <= 0) {
+			throw new Exception("Tổng tiền phải lớn hơn 0");
+		}
+	}
+
+	/**
+	 * Generate a summary of import details for the details field
+	 */
+	private String generateDetailsSummary(List<ImportDetail> details) {
+		StringBuilder summary = new StringBuilder();
+		for (ImportDetail detail : details) {
+			if (summary.length() > 0) {
+				summary.append("; ");
+			}
+			summary.append(String.format("%s - SL: %d", detail.getVariantID(), detail.getQuantity()));
+		}
+		return summary.toString();
+	}
+
+	/**
+	 * Check variant availability
+	 */
+	public boolean checkVariantAvailability(String variantId, int quantity) {
+		try {
+			ProductVariant variant = variantDAO.getVariantByID(variantId);
+			return variant != null;
+		} catch (Exception e) {
+			LOGGER.severe("Error checking variant availability: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public String generateNewImportID() {
+		String lastID = importDAO.generateNewImportID(); // Get last ID from DAO
+		return lastID;
+	}
+}

@@ -1,0 +1,159 @@
+package service;
+
+import entity.User;
+import java.time.LocalDateTime;
+import java.util.logging.Logger;
+
+/**
+ * SessionManager handles user authentication state and session management using
+ * the Singleton pattern to ensure only one instance exists. This class
+ * maintains the currently logged-in user's information and provides methods to
+ * manage the user session.
+ */
+public class SessionManager {
+	// Logger for tracking session-related events
+	private static final Logger LOGGER = Logger.getLogger(SessionManager.class.getName());
+
+	// Singleton instance
+	private static SessionManager instance;
+
+	// Current user information
+	private User currentUser;
+
+	// Session tracking
+	private LocalDateTime lastActivityTime;
+	private static final int SESSION_TIMEOUT_MINUTES = 30;
+
+	// Private constructor to prevent direct instantiation
+	private SessionManager() {
+		LOGGER.info("Initializing new SessionManager instance");
+	}
+
+	/**
+	 * Gets the singleton instance of SessionManager. Creates a new instance if one
+	 * doesn't exist.
+	 */
+	public static synchronized SessionManager getInstance() {
+		if (instance == null) {
+			instance = new SessionManager();
+		}
+		return instance;
+	}
+
+	/**
+	 * Starts a new user session. This method should be called after successful user
+	 * authentication.
+	 * 
+	 * @param user The authenticated user
+	 * @throws IllegalArgumentException if user is null
+	 */
+	public void startSession(User user) {
+		if (user == null) {
+			LOGGER.warning("Attempted to start session with null user");
+			throw new IllegalArgumentException("User cannot be null");
+		}
+
+		this.currentUser = user;
+		this.lastActivityTime = LocalDateTime.now();
+		LOGGER.info("Started new session for user: " + user.getUsername());
+	}
+
+	/**
+	 * Gets the currently logged-in user. Also updates the last activity time to
+	 * prevent session timeout.
+	 * 
+	 * @return The current User, or null if no user is logged in
+	 */
+	public User getCurrentUser() {
+		if (isSessionValid()) {
+			updateLastActivityTime();
+			return currentUser;
+		}
+
+		// If session has expired, clear it and return null
+		if (currentUser != null) {
+			clearSession();
+		}
+		return null;
+	}
+
+	/**
+	 * Checks if there is an active and valid user session.
+	 * 
+	 * @return true if there is a valid session, false otherwise
+	 */
+	public boolean isAuthenticated() {
+		return isSessionValid() && currentUser != null && "active".equals(currentUser.getStatus());
+	}
+
+	/**
+	 * Updates the last activity timestamp. Call this method when the user performs
+	 * any significant action.
+	 */
+	public void updateLastActivityTime() {
+		this.lastActivityTime = LocalDateTime.now();
+	}
+
+	/**
+	 * Checks if the current session is still valid based on timeout.
+	 * 
+	 * @return true if session is valid, false if it has timed out
+	 */
+	private boolean isSessionValid() {
+		if (lastActivityTime == null || currentUser == null) {
+			return false;
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+		return now.minusMinutes(SESSION_TIMEOUT_MINUTES).isBefore(lastActivityTime);
+	}
+
+	/**
+	 * Ends the current session and clears all user data. Call this method when the
+	 * user logs out or the session expires.
+	 */
+	public void clearSession() {
+		LOGGER.info("Clearing session for user: " + (currentUser != null ? currentUser.getUsername() : "null"));
+
+		this.currentUser = null;
+		this.lastActivityTime = null;
+	}
+
+	/**
+	 * Gets the remaining session time in minutes.
+	 * 
+	 * @return remaining minutes, or 0 if session is invalid
+	 */
+	public int getRemainingSessionTime() {
+		if (!isSessionValid()) {
+			return 0;
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+		long minutesElapsed = java.time.Duration.between(lastActivityTime, now).toMinutes();
+		return (int) Math.max(0, SESSION_TIMEOUT_MINUTES - minutesElapsed);
+	}
+
+	/**
+	 * Updates user information in the current session. Use this when user data is
+	 * modified elsewhere in the application.
+	 * 
+	 * @param updatedUser The updated user information
+	 * @throws IllegalStateException if no user is currently logged in
+	 */
+	public void updateCurrentUser(User updatedUser) {
+		if (currentUser == null) {
+			LOGGER.warning("Attempted to update user info with no active session");
+			throw new IllegalStateException("No active session");
+		}
+
+		if (!currentUser.getUserID().equals(updatedUser.getUserID())) {
+			LOGGER.warning("Attempted to update session with different user");
+			throw new IllegalStateException("User ID mismatch");
+		}
+
+		this.currentUser = updatedUser;
+		updateLastActivityTime();
+		LOGGER.info("Updated session information for user: " + updatedUser.getUsername());
+	}
+}

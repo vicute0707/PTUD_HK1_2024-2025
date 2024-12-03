@@ -1,0 +1,258 @@
+package export;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.*;
+import entity.Import;
+import entity.ImportDetail;
+
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.List;
+import java.util.Locale;
+import java.text.NumberFormat;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+
+public class ExcelExporterDonNhap {
+    private static final Logger LOGGER = Logger.getLogger(ExcelExporterDonNhap.class.getName());
+    
+    // Constants for styling the Excel document
+    private static final String FONT_NAME = "Times New Roman";
+    private static final short FONT_SIZE = 12;
+    private static final String DATE_FORMAT = "dd/MM/yyyy HH:mm";
+    private static final String CURRENCY_FORMAT = "#,##0 'VND'";
+    
+    /**
+     * Exports a list of import orders to an Excel file.
+     * Creates a workbook with two sheets: one for import orders summary and another for details.
+     * 
+     * @param imports List of Import objects to export
+     * @param filePath Destination path for the Excel file
+     * @throws Exception if there's an error during export
+     */
+    public static void exportImports(List<Import> imports, String filePath) throws Exception {
+        LOGGER.info("Starting export of " + imports.size() + " import orders to " + filePath);
+        
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            // Create the main styles we'll use throughout the workbook
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle dateStyle = createDateStyle(workbook);
+            CellStyle currencyStyle = createCurrencyStyle(workbook);
+            CellStyle defaultStyle = createDefaultStyle(workbook);
+            
+            // Create and populate the summary sheet
+            XSSFSheet summarySheet = workbook.createSheet("Danh sách phiếu nhập");
+            createSummarySheet(summarySheet, imports, headerStyle, dateStyle, currencyStyle, defaultStyle);
+            
+            // Create and populate the details sheet
+            XSSFSheet detailSheet = workbook.createSheet("Chi tiết phiếu nhập");
+            createDetailSheet(detailSheet, imports, headerStyle, dateStyle, currencyStyle, defaultStyle);
+            
+            // Auto-size all columns in both sheets
+            autoSizeColumns(summarySheet);
+            autoSizeColumns(detailSheet);
+            
+            // Write the workbook to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+                LOGGER.info("Successfully exported data to " + filePath);
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error during export: " + e.getMessage(), e);
+            throw new Exception("Lỗi khi xuất file Excel: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Creates the summary sheet showing all import orders.
+     */
+    private static void createSummarySheet(XSSFSheet sheet, List<Import> imports, 
+            CellStyle headerStyle, CellStyle dateStyle, CellStyle currencyStyle, CellStyle defaultStyle) {
+        
+        // Create header row
+        String[] headers = {
+            "Mã phiếu nhập", "Nhà cung cấp", "Nhân viên nhập hàng", 
+            "Thời gian nhập", "Tổng tiền"
+        };
+        Row headerRow = sheet.createRow(0);
+        
+        // Create headers with styling
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+        
+        // Populate data rows
+        int rowNum = 1;
+        double totalAmount = 0;
+        
+        for (Import importOrder : imports) {
+            Row row = sheet.createRow(rowNum++);
+            
+            // Populate each cell with appropriate formatting
+            createCell(row, 0, importOrder.getImportID(), defaultStyle);
+            createCell(row, 1, importOrder.getSupplier(), defaultStyle);
+            createCell(row, 2, importOrder.getStaff(), defaultStyle);
+            
+            Cell dateCell = row.createCell(3);
+            dateCell.setCellValue(importOrder.getImportDate());
+            dateCell.setCellStyle(dateStyle);
+            
+            Cell amountCell = row.createCell(4);
+            amountCell.setCellValue(importOrder.getTotalAmount());
+            amountCell.setCellStyle(currencyStyle);
+            
+            totalAmount += importOrder.getTotalAmount();
+        }
+        
+        // Add summary row
+        createSummaryRow(sheet, rowNum, totalAmount, headerStyle, currencyStyle);
+    }
+
+    /**
+     * Creates the detail sheet showing individual items for each import order.
+     */
+    private static void createDetailSheet(XSSFSheet sheet, List<Import> imports,
+            CellStyle headerStyle, CellStyle dateStyle, CellStyle currencyStyle, CellStyle defaultStyle) {
+        
+        String[] headers = {
+            "Mã phiếu nhập", "Mã sản phẩm", "Tên sản phẩm", 
+            "Phân loại", "Đơn giá", "Số lượng", "Thành tiền"
+        };
+        
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+        
+        int rowNum = 1;
+        for (Import importOrder : imports) {
+            for (ImportDetail detail : importOrder.getImportDetails()) {
+                Row row = sheet.createRow(rowNum++);
+                
+                createCell(row, 0, importOrder.getImportID(), defaultStyle);
+                createCell(row, 1, detail.getVariantID(), defaultStyle);
+                createCell(row, 2, detail.getProductName(), defaultStyle);
+                createCell(row, 3, detail.getVariantName(), defaultStyle);
+                
+                Cell priceCell = row.createCell(4);
+                priceCell.setCellValue(detail.getPrice());
+                priceCell.setCellStyle(currencyStyle);
+                
+                createCell(row, 5, detail.getQuantity(), defaultStyle);
+                
+                Cell totalCell = row.createCell(6);
+                totalCell.setCellValue(detail.getPrice() * detail.getQuantity());
+                totalCell.setCellStyle(currencyStyle);
+            }
+        }
+    }
+
+    /**
+     * Creates cell styles for the workbook headers.
+     */
+    private static CellStyle createHeaderStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        XSSFFont font = workbook.createFont();
+        font.setFontName(FONT_NAME);
+        font.setFontHeightInPoints((short) 12);
+        font.setBold(true);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        setBorder(style);
+        return style;
+    }
+
+    /**
+     * Creates cell styles for date formatting.
+     */
+    private static CellStyle createDateStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setDataFormat(workbook.createDataFormat().getFormat(DATE_FORMAT));
+        style.setAlignment(HorizontalAlignment.CENTER);
+        setBorder(style);
+        return style;
+    }
+
+    /**
+     * Creates cell styles for currency formatting.
+     */
+    private static CellStyle createCurrencyStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setDataFormat(workbook.createDataFormat().getFormat(CURRENCY_FORMAT));
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        setBorder(style);
+        return style;
+    }
+
+    /**
+     * Creates default cell style with borders.
+     */
+    private static CellStyle createDefaultStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        setBorder(style);
+        return style;
+    }
+
+    /**
+     * Adds borders to a cell style.
+     */
+    private static void setBorder(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+    }
+
+    /**
+     * Creates a cell with the specified value and style.
+     */
+    private static void createCell(Row row, int column, Object value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        if (value != null) {
+            if (value instanceof String) {
+                cell.setCellValue((String) value);
+            } else if (value instanceof Integer) {
+                cell.setCellValue((Integer) value);
+            } else if (value instanceof Double) {
+                cell.setCellValue((Double) value);
+            }
+        }
+        cell.setCellStyle(style);
+    }
+
+    /**
+     * Creates a summary row with totals.
+     */
+    private static void createSummaryRow(XSSFSheet sheet, int rowNum, double totalAmount,
+            CellStyle headerStyle, CellStyle currencyStyle) {
+        
+        Row summaryRow = sheet.createRow(rowNum + 1);
+        Cell labelCell = summaryRow.createCell(0);
+        labelCell.setCellValue("Tổng cộng:");
+        labelCell.setCellStyle(headerStyle);
+        
+        Cell totalCell = summaryRow.createCell(4);
+        totalCell.setCellValue(totalAmount);
+        totalCell.setCellStyle(currencyStyle);
+        
+        // Merge cells for the label
+        sheet.addMergedRegion(new CellRangeAddress(rowNum + 1, rowNum + 1, 0, 3));
+    }
+
+    /**
+     * Auto-sizes all columns in a sheet.
+     */
+    private static void autoSizeColumns(Sheet sheet) {
+        for (int i = 0; i < sheet.getRow(0).getLastCellNum(); i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+}

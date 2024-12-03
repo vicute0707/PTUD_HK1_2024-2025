@@ -1,0 +1,176 @@
+package dao;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
+import connection.MyConnection;
+import entity.ProductVariant;
+
+public class ProductVariantDAO {
+	private static final Logger LOGGER = Logger.getLogger(ProductVariantDAO.class.getName());
+	private MyConnection myConnection;
+
+	public ProductVariantDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public List<ProductVariant> getAllVariantsByProductID(String productID) {
+		List<ProductVariant> variants = new ArrayList<>();
+		String sql = "SELECT * FROM productvariant WHERE productID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, productID);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				ProductVariant variant = createVariantFromResultSet(rs);
+				variants.add(variant);
+			}
+
+			LOGGER.info("Retrieved " + variants.size() + " variants for product " + productID);
+			return variants;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error retrieving variants: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	public boolean addVariant(ProductVariant variant) {
+		String sql = "SELECT productID FROM product WHERE productID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement check = conn.prepareStatement(sql)) {
+
+			check.setString(1, variant.getProductID());
+			ResultSet rs = check.executeQuery();
+
+			if (!rs.next()) {
+				LOGGER.severe("Product ID not found: " + variant.getProductID());
+				return false;
+			}
+
+			sql = "INSERT INTO productvariant (variantID, productID, color, size, quantity) VALUES (?, ?, ?, ?, ?)";
+			try (PreparedStatement pst = conn.prepareStatement(sql)) {
+				pst.setString(1, variant.getVariantID());
+				pst.setString(2, variant.getProductID());
+				pst.setString(3, variant.getColor());
+				pst.setString(4, variant.getSize());
+				pst.setInt(5, variant.getQuantity());
+
+				return pst.executeUpdate() > 0;
+			}
+		} catch (SQLException e) {
+			LOGGER.severe("Error adding variant: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public boolean updateVariant(ProductVariant variant) {
+		String sql = "UPDATE ProductVariant SET color = ?, size = ?, quantity = ? WHERE variantID = ? AND productID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+			pstmt.setString(1, variant.getColor());
+			pstmt.setString(2, variant.getSize());
+			pstmt.setInt(3, variant.getQuantity());
+			pstmt.setString(4, variant.getVariantID());
+			pstmt.setString(5, variant.getProductID());
+
+			int result = pstmt.executeUpdate();
+			return result > 0;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error updating variant: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public boolean deleteVariant(String variantID, String productID) {
+		String sql = "DELETE FROM ProductVariant WHERE variantID = ? AND productID = ?";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, variantID);
+			pst.setString(2, productID);
+
+			boolean result = pst.executeUpdate() > 0;
+			LOGGER.info("Deleted variant " + variantID + ": " + (result ? "success" : "failed"));
+			return result;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error deleting variant: " + e.getMessage());
+			return false;
+		}
+	}
+
+	private ProductVariant createVariantFromResultSet(ResultSet rs) throws SQLException {
+		ProductVariant variant = new ProductVariant();
+		variant.setVariantID(rs.getString("variantID"));
+		variant.setProductID(rs.getString("productID"));
+		variant.setSize(rs.getString("size"));
+		variant.setColor(rs.getString("color"));
+		variant.setQuantity(rs.getInt("quantity"));
+		return variant;
+	}
+
+
+	public String generateNewVariantID(String productID) {
+		String sql = "SELECT variantID FROM productvariant WHERE productID = ? ORDER BY variantID DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, productID);
+			ResultSet rs = pst.executeQuery();
+
+			if (rs.next()) {
+				String lastID = rs.getString("variantID");
+				int number = Integer.parseInt(lastID.substring(productID.length())) + 1;
+				return String.format("%s%03d", productID, number);
+			}
+			return productID + "001";
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error generating variant ID: " + e.getMessage());
+			return productID + "001";
+		}
+	}
+	   public ProductVariant getVariantByID(String variantID) {
+	        String sql = """
+	            SELECT v.*, p.productName, p.brand
+	            FROM ProductVariants v
+	            LEFT JOIN Products p ON v.productID = p.productID 
+	            WHERE CONCAT(p.productID, '-', v.color, '-', v.size) = ?
+	        """;
+
+	        try (Connection conn = myConnection.connect();
+	             PreparedStatement pst = conn.prepareStatement(sql)) {
+	            
+	            pst.setString(1, variantID);
+
+	            try (ResultSet rs = pst.executeQuery()) {
+	                if (rs.next()) {
+	                    ProductVariant variant = new ProductVariant();
+	                    variant.setProductID(rs.getString("productID"));
+	                    variant.setColor(rs.getString("color")); 
+	                    variant.setSize(rs.getString("size"));
+	                    variant.setQuantity(rs.getInt("quantity"));
+	                
+	                    
+	                    LOGGER.info("Found variant: " + variantID);
+	                    return variant;
+	                }
+	            }
+
+	        } catch (SQLException e) {
+	            LOGGER.severe("Error getting variant by ID: " + e.getMessage());
+	        }
+
+	        LOGGER.warning("No variant found with ID: " + variantID);
+	        return null;
+	    }
+
+	   
+}

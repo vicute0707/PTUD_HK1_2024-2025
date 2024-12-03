@@ -77,7 +77,6 @@ public class QuanLyDonBan extends JPanel {
 
 		initializeComponents();
 		setupLayout();
-		loadSampleData();
 	}
 
 	private void initializeComponents() {
@@ -177,7 +176,6 @@ public class QuanLyDonBan extends JPanel {
 		setBorder(new EmptyBorder(30, 30, 30, 30));
 
 		add(createTopPanel(), BorderLayout.NORTH);
-		add(createFilterPanel(), BorderLayout.WEST);
 		add(createMainPanel(), BorderLayout.CENTER);
 	}
 
@@ -256,53 +254,7 @@ public class QuanLyDonBan extends JPanel {
 		JOptionPane.showMessageDialog(this, message, "Lỗi", JOptionPane.ERROR_MESSAGE);
 	}
 
-	private JPanel createFilterPanel() {
-		JPanel filterPanel = new JPanel();
-		filterPanel.setLayout(new BoxLayout(filterPanel, BoxLayout.Y_AXIS));
-		filterPanel.setBackground(CONTENT_COLOR);
-		filterPanel.setBorder(BorderFactory.createCompoundBorder(new EmptyBorder(0, 0, 0, 0), BorderFactory
-				.createCompoundBorder(new LineBorder(PRIMARY_COLOR, 0, true), new EmptyBorder(20, 20, 20, 20))));
-		filterPanel.setPreferredSize(new Dimension(350, 200));
-		filterPanel.add(createFilter.createFilterTitle());
-		filterPanel.add(Box.createVerticalStrut(20));
-		// Nhân viên
-		filterPanel.add(createFilter.createFilterField("Nhân viên bán hàng", employeeCombo));
-		filterPanel.add(Box.createVerticalStrut(15));
-		// Thời gian
-		filterPanel.add(createDateFilterPanel());
-		filterPanel.add(Box.createVerticalStrut(15));
-		// Khoảng tiền
-		filterPanel.add(createAmountFilterPanel());
-		filterPanel.add(Box.createVerticalStrut(25));
-		// Buttons
-		filterPanel.add(createFilter.createFilterButtonsPanel());
-		return filterPanel;
-	}
-
-	private void loadSampleData() {
-		Object[][] data = { { "1", "DB001", "Nguyễn Văn An", "01/11/2023", "1,500,000 VND" },
-				{ "2", "DB002", "Trần Thị Bình", "02/11/2023", "2,800,000 VND" },
-				{ "3", "DB003", "Lê Hoàng Nam", "03/11/2023", "3,200,000 VND" },
-				{ "4", "DB004", "Nguyễn Văn An", "04/11/2023", "1,900,000 VND" },
-				{ "5", "DB005", "Trần Thị Bình", "05/11/2023", "2,100,000 VND" },
-				{ "6", "DB006", "Lê Hoàng Nam", "06/11/2023", "4,500,000 VND" },
-				{ "7", "DB007", "Nguyễn Văn An", "07/11/2023", "3,700,000 VND" },
-				{ "8", "DB008", "Trần Thị Bình", "08/11/2023", "2,900,000 VND" },
-				{ "9", "DB009", "Lê Hoàng Nam", "09/11/2023", "1,800,000 VND" },
-				{ "10", "DB010", "Nguyễn Văn An", "10/11/2023", "5,200,000 VND" } };
-
-		for (Object[] row : data) {
-			tableModel.addRow(row);
-		}
-		updateSummary();
-	}
-
-	private void updateSTTColumn() {
-		for (int i = 0; i < tableModel.getRowCount(); i++) {
-			tableModel.setValueAt(String.valueOf(i + 1), i, 0);
-		}
-	}
-
+	
 	private JPanel createMainPanel() {
 
 		JPanel mainPanel = new JPanel(new BorderLayout(0, 20));
@@ -493,7 +445,6 @@ public class QuanLyDonBan extends JPanel {
 			// Xử lý sự kiện buttons
 			deleteButton.addActionListener(e -> {
 				tableModel.removeRow(selectedRow);
-				updateSTTColumn();
 				updateSummary();
 				confirmDialog.dispose();
 

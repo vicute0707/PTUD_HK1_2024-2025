@@ -1,0 +1,552 @@
+package dao;
+
+import entity.SanPham;
+import entity.DanhMuc;
+import connection.MyConnection;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import component.ImageUploadUtil;
+
+public class SanPhamDAO {
+	private static final Logger LOGGER = Logger.getLogger(SanPhamDAO.class.getName());
+	private MyConnection myConnection;
+	private static final String DEFAULT_IMAGE = "default-product.jpg";
+	private static final String IMAGE_DIRECTORY = "src/img_product";
+
+	public SanPhamDAO() {
+		myConnection = new MyConnection();
+	}
+
+	public ArrayList<SanPham> getAllSanPham() {
+		ArrayList<SanPham> dsSanPham = new ArrayList<>();
+		String sql = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				ORDER BY p.productID
+				""";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			while (rs.next()) {
+				SanPham sp = new SanPham();
+
+				// Set thông tin cơ bản
+				sp.setMaSP(rs.getString("productID"));
+				sp.setTenSP(rs.getString("name"));
+				sp.setSoLuongTonKho(rs.getInt("stockQuantity"));
+				sp.setThuongHieu(rs.getString("brand"));
+				sp.setHinhAnh(rs.getString("imagePath"));
+
+				sp.setTinhTrang(rs.getString("status"));
+
+				// Set danh mục
+				DanhMuc dm = new DanhMuc();
+				dm.setMaDM(rs.getString("category"));
+				dm.setTenDM(rs.getString("category_name"));
+				sp.setDanhmuc(dm);
+
+				dsSanPham.add(sp);
+			}
+			LOGGER.info("Đã lấy " + dsSanPham.size() + " sản phẩm từ database");
+			return dsSanPham;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi khi lấy danh sách sản phẩm: " + e.getMessage());
+			return new ArrayList<>();
+		}
+	}
+
+	public boolean addSanPham(SanPham sp) {
+		String sql = "INSERT INTO product (productID, name, category, brand, imagePath, stockQuantity, status) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+			String newImagePath = sp.getHinhAnh();
+
+			// Handle image upload - now stores just the filename
+			String imageName = DEFAULT_IMAGE;
+			if (sp.getHinhAnh() != null && !sp.getHinhAnh().isEmpty()) {
+				try {
+					File imageFile = new File(sp.getHinhAnh());
+					imageName = ImageUploadUtil.uploadProductImage(newImagePath, sp.getMaSP());
+				} catch (IOException e) {
+					LOGGER.warning("Failed to upload image for product " + sp.getMaSP() + ": " + e.getMessage());
+				}
+			}
+
+			pst.setString(1, sp.getMaSP());
+			pst.setString(2, sp.getTenSP());
+			pst.setString(3, sp.getDanhmuc().getMaDM());
+			pst.setString(4, sp.getThuongHieu());
+			pst.setString(5, imageName); // Store just the filename
+			pst.setInt(6, sp.getSoLuongTonKho());
+			pst.setString(7, sp.getTinhTrang());
+
+			return pst.executeUpdate() > 0;
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error adding product: " + e.getMessage());
+			return false;
+		}
+	}
+
+	public boolean updateSanPham(SanPham sp) {
+		Connection conn = null;
+		PreparedStatement pst = null;
+		ResultSet rs = null;
+		boolean success = false;
+
+		try {
+			// Get a single connection for the entire operation
+			conn = myConnection.connect();
+			conn.setAutoCommit(false); // Start transaction
+
+			// First, get existing product data using the same connection
+			String selectSql = """
+					SELECT p.*, c.name as category_name
+					FROM product p
+					LEFT JOIN category c ON p.category = c.categoryID
+					WHERE p.productID = ?
+					""";
+
+			pst = conn.prepareStatement(selectSql);
+			pst.setString(1, sp.getMaSP());
+			rs = pst.executeQuery();
+
+			String oldImageName = null;
+			if (rs.next()) {
+				oldImageName = rs.getString("imagePath");
+			} else {
+				throw new SQLException("Product not found: " + sp.getMaSP());
+			}
+
+			// Close the first PreparedStatement and ResultSet before creating new ones
+			if (rs != null)
+				rs.close();
+			if (pst != null)
+				pst.close();
+
+			// Handle image update
+			String finalImageName = oldImageName; // Default to keeping current image
+			if (sp.getHinhAnh() != null && !sp.getHinhAnh().equals(oldImageName)) {
+				finalImageName = ImageUploadUtil.updateProductImage(sp.getHinhAnh(), sp.getMaSP(), oldImageName);
+			}
+
+			// Prepare and execute the update query
+			String updateSql = """
+					UPDATE Product
+					SET name = ?,
+					    category = ?,
+					    stockQuantity = ?,
+					    brand = ?,
+					    imagePath = ?,
+					    status = ?
+					WHERE productID = ?
+					""";
+
+			pst = conn.prepareStatement(updateSql);
+			pst.setString(1, sp.getTenSP());
+			pst.setString(2, sp.getDanhmuc().getMaDM());
+			pst.setInt(3, sp.getSoLuongTonKho());
+			pst.setString(4, sp.getThuongHieu());
+			pst.setString(5, finalImageName);
+			pst.setString(6, determineTinhTrang(sp.getSoLuongTonKho()));
+			pst.setString(7, sp.getMaSP());
+
+			int rowsAffected = pst.executeUpdate();
+
+			if (rowsAffected > 0) {
+				conn.commit(); // Commit transaction
+				success = true;
+				LOGGER.info("Successfully updated product: " + sp.getMaSP());
+			} else {
+				conn.rollback(); // Rollback if no rows affected
+				LOGGER.warning("No rows affected when updating product: " + sp.getMaSP());
+			}
+
+		} catch (SQLException e) {
+			LOGGER.severe("Database error while updating product: " + e.getMessage());
+			try {
+				if (conn != null)
+					conn.rollback();
+			} catch (SQLException rollbackEx) {
+				LOGGER.severe("Error during transaction rollback: " + rollbackEx.getMessage());
+			}
+		} catch (Exception e) {
+			LOGGER.severe("Error updating product: " + e.getMessage());
+			try {
+				if (conn != null)
+					conn.rollback();
+			} catch (SQLException rollbackEx) {
+				LOGGER.severe("Error during transaction rollback: " + rollbackEx.getMessage());
+			}
+		} finally {
+			// Close resources in reverse order of creation
+			try {
+				if (rs != null)
+					rs.close();
+				if (pst != null)
+					pst.close();
+				if (conn != null) {
+					conn.setAutoCommit(true); // Reset auto-commit
+					conn.close();
+				}
+			} catch (SQLException e) {
+				LOGGER.severe("Error closing database resources: " + e.getMessage());
+			}
+		}
+
+		return success;
+	}
+
+	// Helper method to validate product data
+	private boolean validateProductData(SanPham sp) {
+		if (sp == null) {
+			LOGGER.severe("Product object is null");
+			return false;
+		}
+
+		if (sp.getMaSP() == null || sp.getMaSP().trim().isEmpty()) {
+			LOGGER.severe("Product ID is null or empty");
+			return false;
+		}
+
+		if (sp.getTenSP() == null || sp.getTenSP().trim().isEmpty()) {
+			LOGGER.severe("Product name is null or empty");
+			return false;
+		}
+
+		if (sp.getDanhmuc() == null || sp.getDanhmuc().getMaDM() == null) {
+			LOGGER.severe("Category information is missing");
+			return false;
+		}
+
+		if (sp.getSoLuongTonKho() < 0) {
+			LOGGER.severe("Invalid stock quantity");
+			return false;
+		}
+
+		return true;
+	}
+
+	private String handleImageUpdate(SanPham newProduct, SanPham existingProduct) {
+		String finalImageName = existingProduct.getHinhAnh();
+
+		// Only process image if there's a new one
+		if (newProduct.getHinhAnh() != null && !newProduct.getHinhAnh().equals(existingProduct.getHinhAnh())) {
+			try {
+				// Delete old image if it exists and isn't the default
+				if (existingProduct.getHinhAnh() != null && !existingProduct.getHinhAnh().equals(DEFAULT_IMAGE)) {
+					ImageUploadUtil.deleteProductImage(existingProduct.getHinhAnh());
+				}
+
+				// Check if the new image path is already in the image directory
+				String newImagePath = newProduct.getHinhAnh();
+				if (!newImagePath.startsWith(IMAGE_DIRECTORY)) {
+					// If it's just a filename or different path, check if the file exists
+					File imageFile = new File(newImagePath);
+					if (!imageFile.exists()) {
+						LOGGER.warning("Image file not found: " + newImagePath);
+						return finalImageName; // Keep existing image if new one not found
+					}
+				}
+
+				// Upload the new image
+				finalImageName = ImageUploadUtil.uploadProductImage(newImagePath, newProduct.getMaSP());
+				LOGGER.info("Successfully updated image for product: " + newProduct.getMaSP());
+
+			} catch (IOException e) {
+				LOGGER.warning("Failed to process image update: " + e.getMessage());
+				// Keep the existing image if update fails
+			}
+		}
+
+		return finalImageName != null ? finalImageName : DEFAULT_IMAGE;
+	}
+
+	// Helper method to determine product status based on stock
+	private String determineTinhTrang(int soLuong) {
+		if (soLuong <= 0)
+			return "Chưa nhập về";
+		if (soLuong <= 10)
+			return "Sắp hết";
+		return "Còn hàng";
+	}
+
+	public String getLastProductID() {
+		String sql = "SELECT productID FROM product ORDER BY CAST(SUBSTRING(productID, 3) AS UNSIGNED) DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			if (rs.next()) {
+				return rs.getString("productID");
+			}
+			return "SP000";
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi lấy mã sản phẩm cuối: " + e.getMessage());
+			return "SP000";
+		}
+	}
+
+	 public boolean deleteSanPham(String maSP) {
+	        Connection conn = null;
+	        CallableStatement cs = null;
+	        PreparedStatement pst = null;
+	        ResultSet rs = null;
+	        String imagePath = null;
+
+	        try {
+	            // Get a single connection and start transaction
+	            conn = myConnection.connect();
+	            conn.setAutoCommit(false);
+
+	            // First, get the product's image path using the same connection
+	            String selectSql = "SELECT imagePath FROM product WHERE productID = ?";
+	            pst = conn.prepareStatement(selectSql);
+	            pst.setString(1, maSP);
+	            rs = pst.executeQuery();
+
+	            if (rs.next()) {
+	                imagePath = rs.getString("imagePath");
+	            }
+
+	            // Close the first statement before creating new one
+	            if (pst != null) pst.close();
+
+	            // Now execute the delete stored procedure
+	            cs = conn.prepareCall("CALL sp_DeleteProduct(?)");
+	            cs.setString(1, maSP);
+	            boolean result = cs.executeUpdate() > 0;
+
+	            if (result) {
+	                // If database deletion was successful, try to delete the image
+	                if (imagePath != null && !imagePath.equals(DEFAULT_IMAGE)) {
+	                    try {
+	                        // Verify the image exists before attempting deletion
+	                        Path imageFilePath = Paths.get("src/img_product", imagePath);
+	                        if (Files.exists(imageFilePath)) {
+	                            boolean imageDeleted = ImageUploadUtil.deleteProductImage(imagePath);
+	                            if (!imageDeleted) {
+	                                LOGGER.warning("Failed to delete image file: " + imagePath);
+	                            }
+	                        } else {
+	                            LOGGER.info("Image file not found: " + imagePath);
+	                        }
+	                    } catch (Exception e) {
+	                        LOGGER.warning("Error while deleting image file: " + e.getMessage());
+	                        // Continue with transaction even if image deletion fails
+	                    }
+	                }
+	                
+	                // Commit the transaction
+	                conn.commit();
+	                LOGGER.info("Successfully deleted product: " + maSP);
+	                return true;
+	            } else {
+	                // Rollback if deletion failed
+	                conn.rollback();
+	                LOGGER.warning("Failed to delete product: " + maSP);
+	                return false;
+	            }
+
+	        } catch (SQLException e) {
+	            LOGGER.severe("Database error while deleting product: " + e.getMessage());
+	            try {
+	                if (conn != null) {
+	                    conn.rollback();
+	                }
+	            } catch (SQLException rollbackEx) {
+	                LOGGER.severe("Error during transaction rollback: " + rollbackEx.getMessage());
+	            }
+	            return false;
+	        } finally {
+	            // Close all resources in reverse order
+	            try {
+	                if (rs != null) rs.close();
+	                if (cs != null) cs.close();
+	                if (pst != null) pst.close();
+	                if (conn != null) {
+	                    conn.setAutoCommit(true);
+	                    conn.close();
+	                }
+	            } catch (SQLException e) {
+	                LOGGER.severe("Error closing database resources: " + e.getMessage());
+	            }
+	        }
+	    }
+
+	public SanPham getSanPhamByID(String productID) {
+		SanPham product = null;
+		try {
+			// Kết nối cơ sở dữ liệu và truy vấn sản phẩm dựa trên productID
+			Connection conn = myConnection.connect();
+			String sql = "SELECT p.*, c.name as category_name FROM product p "
+					+ "LEFT JOIN category c ON p.category = c.categoryID " + "WHERE p.productID = ?";
+			PreparedStatement stmt = conn.prepareStatement(sql);
+			stmt.setString(1, productID);
+			ResultSet rs = stmt.executeQuery();
+
+			if (rs.next()) {
+				product = new SanPham();
+				product.setMaSP(rs.getString("productID"));
+				product.setTenSP(rs.getString("name"));
+				// Lấy thông tin danh mục
+				String categoryID = rs.getString("category");
+				DanhMuc danhMuc = new DanhMuc();
+				danhMuc.setMaDM(categoryID);
+				danhMuc.setTenDM(rs.getString("category_name"));
+				product.setDanhmuc(danhMuc);
+				product.setSoLuongTonKho(rs.getInt("stockQuantity"));
+				product.setThuongHieu(rs.getString("brand"));
+				product.setTinhTrang(rs.getString("status"));
+				product.setHinhAnh(rs.getString("imagePath"));
+			}
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi khi lấy thông tin sản phẩm: " + e.getMessage());
+		} finally {
+			myConnection.closeConnection();
+		}
+		return product;
+	}
+
+	private SanPham createSanPhamFromResultSet(ResultSet rs) throws SQLException {
+		SanPham sp = new SanPham();
+		sp.setMaSP(rs.getString("productID"));
+		sp.setTenSP(rs.getString("name"));
+		sp.setSoLuongTonKho(rs.getInt("stockQuantity"));
+		sp.setThuongHieu(rs.getString("brand"));
+		sp.setHinhAnh(rs.getString("imagePath"));
+
+		DanhMuc dm = new DanhMuc();
+		dm.setMaDM(rs.getString("category"));
+		dm.setTenDM(rs.getString("category_name"));
+		sp.setDanhmuc(dm);
+
+		sp.setTinhTrang(getTinhTrangText(rs.getInt("stockQuantity")));
+
+		return sp;
+	}
+
+	private String getTinhTrangText(int soLuong) {
+		if (soLuong <= 0)
+			return "Hết hàng";
+		if (soLuong <= 10)
+			return "Sắp hết";
+		return "Còn hàng";
+	}
+
+	public String getLastProductId() {
+		String sql = "SELECT productID FROM product ORDER BY productID DESC LIMIT 1";
+
+		try (Connection conn = myConnection.connect();
+				PreparedStatement pst = conn.prepareStatement(sql);
+				ResultSet rs = pst.executeQuery()) {
+
+			if (rs.next()) {
+				return rs.getString("productID");
+			}
+			return "PRD000";
+
+		} catch (SQLException e) {
+			LOGGER.severe("Lỗi lấy mã sản phẩm cuối cùng: " + e.getMessage());
+			return "PRD000";
+		}
+	}
+
+	public List<SanPham> getSanPhamByCategory(String categoryId) {
+		List<SanPham> products = new ArrayList<>();
+		String sql = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				WHERE p.category = ?
+				""";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			pst.setString(1, categoryId);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				SanPham product = new SanPham();
+				product.setMaSP(rs.getString("productID"));
+				product.setTenSP(rs.getString("name"));
+				product.setSoLuongTonKho(rs.getInt("stockQuantity"));
+				product.setThuongHieu(rs.getString("brand"));
+				product.setHinhAnh(rs.getString("imagePath"));
+
+				// Create and set DanhMuc
+				DanhMuc dm = new DanhMuc();
+				dm.setMaDM(rs.getString("category"));
+				dm.setTenDM(rs.getString("category_name"));
+				product.setDanhmuc(dm);
+				String dbImagePath = rs.getString("imagePath");
+				if (dbImagePath != null && !dbImagePath.trim().isEmpty()) {
+					// Ensure the path uses correct separators and format
+					String formattedPath = "/images/" + dbImagePath.replace("\\", "/");
+					product.setHinhAnh(formattedPath);
+				} else {
+					// Set default image path if no image in database
+					product.setHinhAnh("/images/default-product.png");
+				}
+
+				products.add(product);
+
+			}
+
+			LOGGER.info("Retrieved " + products.size() + " products for category: " + categoryId);
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error retrieving products for category " + categoryId + ": " + e.getMessage());
+		}
+
+		return products;
+	}
+
+	public List<SanPham> searchProductsByName(String keyword) {
+		List<SanPham> searchResults = new ArrayList<>();
+
+		// Enhanced SQL query with JOIN to get category information
+		String sql = """
+				SELECT p.*, c.name as category_name
+				FROM product p
+				LEFT JOIN category c ON p.category = c.categoryID
+				WHERE LOWER(p.name) LIKE LOWER(?)
+				""";
+
+		try (Connection conn = myConnection.connect(); PreparedStatement pst = conn.prepareStatement(sql)) {
+
+			String searchPattern = "%" + keyword.trim() + "%";
+			pst.setString(1, searchPattern);
+			ResultSet rs = pst.executeQuery();
+
+			while (rs.next()) {
+				// Using the existing helper method for consistent object creation
+				SanPham product = createSanPhamFromResultSet(rs);
+				searchResults.add(product);
+			}
+
+			LOGGER.info("Found " + searchResults.size() + " products matching: " + keyword);
+
+		} catch (SQLException e) {
+			LOGGER.severe("Error searching products with keyword '" + keyword + "': " + e.getMessage());
+		} finally {
+			myConnection.closeConnection();
+		}
+
+		return searchResults;
+	}
+}
